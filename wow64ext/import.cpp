@@ -5,6 +5,7 @@ NTSTATUS(NTAPI* _NtQueryInformationProcess64)(IN HANDLE ProcessHandle,
     IN PROCESSINFOCLASS ProcessInformationClass, OUT PVOID ProcessInformation,
     IN ULONG ProcessInformationLength, OUT PULONG ReturnLength OPTIONAL);
 
+HANDLE cur_process;
 HMODULE hmod_wow64ext_only_mapped;
 DWORD64 hmod_ntdll64;
 HMODULE hmod_ntdll64_only_mapped;
