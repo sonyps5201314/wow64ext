@@ -73,7 +73,17 @@ static int Wow64Ext_DoWork(BOOL bToStart)
     {
         return -7;
     }
-    UINT* pHeavensGateNum = (UINT*)GetProcAddressByImageExportDirectoryT<PIMAGE_NT_HEADERS64>(hmod_wow64ext_only_mapped, "HeavensGateNum");
+
+    if (bToStart)
+    {
+        cur_process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
+    }
+    if (cur_process == NULL)
+    {
+        return -8;
+    }
+
+    UINT* pHeavensGateNum = (UINT*)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_wow64ext_only_mapped, "HeavensGateNum");
     if (bToStart)
     {
         // Temporarily map loading the x86 version's ntdll.dll to prevent NtWow64ReadVirtualMemory64 from being hooked
@@ -86,9 +96,9 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         HMODULE hmod_ntdll32_x86_only_mapped = (HMODULE)MapBinary(szNtDll32Name_x86);
         if (hmod_ntdll32_x86_only_mapped == NULL)
         {
-            return -8;
+            return -9;
         }
-        PBYTE pcbCode = (PBYTE)GetProcAddressByImageExportDirectoryT<PIMAGE_NT_HEADERS32>(hmod_ntdll32_x86_only_mapped, "NtWow64ReadVirtualMemory64");
+        PBYTE pcbCode = (PBYTE)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS32>(cur_process, (DWORD64)hmod_ntdll32_x86_only_mapped, "NtWow64ReadVirtualMemory64");
         // B8 F5 01 00 00          mov     eax, 1F5h       ; NtWow64ReadVirtualMemory64
         if (pcbCode[0] == 0xB8)
         {
@@ -99,31 +109,26 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         hmod_ntdll32_x86_only_mapped = NULL;
     }
 
-    PVOID64* pWow64SystemServiceEx_O = (PVOID64*)GetProcAddressByImageExportDirectoryT<PIMAGE_NT_HEADERS64>(hmod_wow64ext_only_mapped, "Wow64SystemServiceEx_O");
+    PVOID64* pWow64SystemServiceEx_O = (PVOID64*)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_wow64ext_only_mapped, "Wow64SystemServiceEx_O");
     if (!bToStart && *pWow64SystemServiceEx_O == NULL)
     {
-        return -9;
+        return -10;
     }
-    PVOID Wow64SystemServiceEx_M = GetProcAddressByImageExportDirectoryT<PIMAGE_NT_HEADERS64>(hmod_wow64ext_only_mapped, "Wow64SystemServiceEx_M");
+    PVOID Wow64SystemServiceEx_M = (PVOID)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_wow64ext_only_mapped, "Wow64SystemServiceEx_M");
     PVOID pNewFunction = Wow64SystemServiceEx_M;
 
     if (bToStart)
     {
-        hmod_ntdll64 = (DWORD64)GetProcessModuleHandle_64From32(GetCurrentProcessId(), L"ntdll.dll");
+        hmod_ntdll64 = (DWORD64)GetProcessModuleHandle64(cur_process, L"ntdll.dll");
         if (hmod_ntdll64 == NULL)
         {
-            return -10;
+            return -11;
         }
     }
     else
     {
         ATLASSERT(hmod_ntdll64);
         hmod_ntdll64 = NULL;
-    }
-
-    if (_NtReadVirtualMemory64 == NULL)
-    {
-        return -11;
     }
 
     if (bToStart)
@@ -155,7 +160,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         hmod_ntdll64_only_mapped = NULL;
     }
 
-    HMODULE hDstMod = (HMODULE)Ptr64ToPtr(GetProcessModuleHandle_64From32(GetCurrentProcessId(), pDstModName));
+    HMODULE hDstMod = (HMODULE)GetProcessModuleHandle64(cur_process, pDstModName);
     if (hDstMod == NULL)
     {
         return 1;
@@ -252,6 +257,9 @@ static int Wow64Ext_DoWork(BOOL bToStart)
     {
         UnmapViewOfFile(hmod_wow64ext_only_mapped);
         hmod_wow64ext_only_mapped = NULL;
+
+        CloseHandle(cur_process);
+        cur_process = NULL;
     }
 
     return 0;
@@ -264,7 +272,7 @@ static DWORD64 Wow64Ext_GetNative64BitNtDllProcAddress(LPCSTR name)
         ATLASSERT(hmod_ntdll64 && hmod_ntdll64_only_mapped);
         return 0;
     }
-    DWORD dwFuncIn32 = (DWORD)GetProcAddressByImageExportDirectoryT<PIMAGE_NT_HEADERS64>(hmod_ntdll64_only_mapped, name);
+    DWORD dwFuncIn32 = (DWORD)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_ntdll64_only_mapped, name);
     if (dwFuncIn32 == 0)
     {
         ATLASSERT(dwFuncIn32);
