@@ -179,7 +179,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
 
     while (pImageImport->Name)
     {
-        if (0 == _strcmpi((char*)((PBYTE)hDstMod + pImageImport->Name), pDllNameOfThatFunction))
+        if (0 == _stricmp((char*)((PBYTE)hDstMod + pImageImport->Name), pDllNameOfThatFunction))
         {
             break;
         }
@@ -223,7 +223,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         {
             // Is this the function we're looking for?
             IMAGE_IMPORT_BY_NAME* pImportByName = (IMAGE_IMPORT_BY_NAME*)((PBYTE)hDstMod + pNameThunk->u1.AddressOfData);
-            BOOL bFound = (0 == _stricmp(pImportByName->Name, pThatFunctionName));
+            BOOL bFound = (0 == strcmp((const char*)pImportByName->Name, pThatFunctionName));
             if (bFound)
             {
                 // Get the address of the function address
