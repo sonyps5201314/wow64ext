@@ -12,8 +12,7 @@
 #include <ntdll.h>
 #include <atlbase.h>
 
-// ntdllp.lib will appear after installing WDK
-#pragma comment(lib, "ntdllp.lib")
+#pragma comment(lib, "ntdll.lib")
 
 #include "..\wow64ext\wow64ext.h"
 #include "..\wow64ext\import.cpp"

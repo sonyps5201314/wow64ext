@@ -24,8 +24,11 @@ typedef long NTSTATUS;
 
 #include <stdlib.h>
 
-// #pragma comment(lib, "ntdll.lib")
-// ntdllp.lib will appear after installing WDK
-#pragma comment(lib, "ntdllp.lib")
+#ifndef EXTERN_C_START
+#define EXTERN_C_START extern "C" {
+#endif
+#ifndef EXTERN_C_END
+#define EXTERN_C_END   }
+#endif
 
 #endif //PCH_H
