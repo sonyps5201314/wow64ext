@@ -100,7 +100,9 @@ static BOOL VirtualProtectEx64(HANDLE hProcess, DWORD64 lpAddress, SIZE_T dwSize
     return set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtProtectVirtualMemory", 5, (DWORD64)hProcess, (DWORD64)&lpAddress, (DWORD64)&size, (DWORD64)flNewProtect, (DWORD64)lpflOldProtect));
 }
 
+#ifndef _WIN64
 typedef XSAVE_FORMAT XMM_SAVE_AREA32, * PXMM_SAVE_AREA32;
+#endif
 
 typedef struct DECLSPEC_ALIGN(16) _AMD64_CONTEXT {
     DWORD64 P1Home;          /* 000 */

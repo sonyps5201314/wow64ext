@@ -364,7 +364,7 @@ DWORD64 GetProcAddressByImageExportDirectoryT(HANDLE hProcess, DWORD64 hModule, 
         DWORD dwBase = (pImageExportDirectory->Base);
 
         // This is to check in what way (function name or function number) to check the function address
-        DWORD dwName = (DWORD_PTR)lpProcName;
+        DWORD dwName = (DWORD)(DWORD_PTR)lpProcName;
         if (IS_INTRESOURCE(dwName))// This is to look up the function address by means of ordinal number  
         {
             // (dwName & 0xFFFF0000) == 0  

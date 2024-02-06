@@ -279,7 +279,7 @@ static DWORD64 Wow64Ext_GetNative64BitNtDllProcAddress(LPCSTR name)
         return 0;
     }
 
-    DWORD64 pfn = hmod_ntdll64 + (dwFuncIn32 - (DWORD)hmod_ntdll64_only_mapped);
+    DWORD64 pfn = hmod_ntdll64 + (dwFuncIn32 - (DWORD)(DWORD_PTR)hmod_ntdll64_only_mapped);
     return pfn;
 }
 
