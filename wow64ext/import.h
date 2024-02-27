@@ -164,7 +164,7 @@ extern NTSTATUS(NTAPI* _NtReadVirtualMemory64)(IN HANDLE ProcessHandle, IN PVOID
 extern NTSTATUS(NTAPI* _NtQueryInformationProcess64)(IN HANDLE ProcessHandle,
     IN PROCESSINFOCLASS ProcessInformationClass, OUT PVOID ProcessInformation,
     IN ULONG ProcessInformationLength, OUT PULONG ReturnLength OPTIONAL);
-static DWORD64 GetProcessModuleHandle64(HANDLE hProcess, LPCWSTR lpModuleName)
+static DWORD64 FindProcessModule64(HANDLE hProcess, LPCWSTR lpModuleName, OUT LPWSTR lpModuleFullPath /*= NULL*/ OPTIONAL, DWORD nModuleFullPathLen /*= 0*/ OPTIONAL)
 {
     ATLASSERT(hProcess);
     ATLASSERT(lpModuleName);
@@ -211,6 +211,11 @@ static DWORD64 GetProcessModuleHandle64(HANDLE hProcess, LPCWSTR lpModuleName)
     UINT64 size;
     NTSTATUS iReturn;
     PVOID64 pAddrPEB = NULL;
+
+    if (lpModuleFullPath && nModuleFullPathLen > 0)
+    {
+        lpModuleFullPath[0] = 0;
+    }
 
 
     iReturn = _NtQueryInformationProcess64(hProcess, ProcessBasicInformation, &pbi64, sizeof(pbi64), &dwSize);
@@ -278,6 +283,11 @@ static DWORD64 GetProcessModuleHandle64(HANDLE hProcess, LPCWSTR lpModuleName)
             {
                 if (!_wcsnicmp(wFullDllName, lpModuleName, _countof(wFullDllName)))
                 {
+                    if (lpModuleFullPath && nModuleFullPathLen > 0)
+                    {
+                        wcsncpy(lpModuleFullPath, wFullDllName, nModuleFullPathLen);
+                        lpModuleFullPath[nModuleFullPathLen - 1] = 0;
+                    }
                     return (DWORD64)module_info.DllBase;
                 }
             }
@@ -286,6 +296,11 @@ static DWORD64 GetProcessModuleHandle64(HANDLE hProcess, LPCWSTR lpModuleName)
                 LPCWSTR pszDllName = PathFindFileNameW(wFullDllName);
                 if (!_wcsicmp(pszDllName, lpModuleName))
                 {
+                    if (lpModuleFullPath && nModuleFullPathLen > 0)
+                    {
+                        wcsncpy(lpModuleFullPath, wFullDllName, nModuleFullPathLen);
+                        lpModuleFullPath[nModuleFullPathLen - 1] = 0;
+                    }
                     return (DWORD64)module_info.DllBase;
                 }
             }
@@ -295,6 +310,11 @@ static DWORD64 GetProcessModuleHandle64(HANDLE hProcess, LPCWSTR lpModuleName)
     }
 
     return NULL;
+}
+
+static DWORD64 GetProcessModuleHandle64(HANDLE hProcess, LPCWSTR lpModuleName)
+{
+    return FindProcessModule64(hProcess, lpModuleName, NULL, 0);
 }
 
 template<typename IMAGE_NT_HEADERS_T>
