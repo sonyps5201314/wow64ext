@@ -186,6 +186,8 @@ static DWORD64 FindProcessModule64(HANDLE hProcess, LPCWSTR lpModuleName, OUT LP
                     GetProcAddress(hmod_ntdll, "NtWow64QueryInformationProcess64");
                 _NtReadVirtualMemory64 = (NTSTATUS(NTAPI*)(HANDLE, PVOID64, PVOID, UINT64, PUINT64))
                     GetProcAddress(hmod_ntdll, "NtWow64ReadVirtualMemory64");
+                //NtWow64ReadVirtualMemory64 does not support the process pseudo handle returned by GetCurrentProcess()
+                ATLASSERT(hProcess != GetCurrentProcess());
             }
             else
             {
@@ -339,6 +341,8 @@ DWORD64 GetProcAddressByImageExportDirectoryT(HANDLE hProcess, DWORD64 hModule, 
             {
                 _NtReadVirtualMemory64 = (NTSTATUS(NTAPI*)(HANDLE, PVOID64, PVOID, UINT64, PUINT64))
                     GetProcAddress(hmod_ntdll, "NtWow64ReadVirtualMemory64");
+                //NtWow64ReadVirtualMemory64 does not support the process pseudo handle returned by GetCurrentProcess()
+                ATLASSERT(hProcess != GetCurrentProcess());
             }
             else
             {
