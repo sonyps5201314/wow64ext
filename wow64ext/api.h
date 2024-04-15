@@ -67,7 +67,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         {
             return -6;
         }
-        hmod_wow64ext_only_mapped = (HMODULE)MapBinary(pszWow64ExtFileName);
+        hmod_wow64ext_only_mapped = (HMODULE)MapImage(pszWow64ExtFileName);
     }
     if (hmod_wow64ext_only_mapped == NULL)
     {
@@ -93,7 +93,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         TCHAR szNtDll32Name_x86[MAX_PATH];
         szNtDll32Name_x86[0] = 0;
         _sntprintf(szNtDll32Name_x86, _countof(szNtDll32Name_x86), _T("%s\\SysWOW64\\ntdll.dll"), _tgetenv(_T("windir")));
-        HMODULE hmod_ntdll32_x86_only_mapped = (HMODULE)MapBinary(szNtDll32Name_x86);
+        HMODULE hmod_ntdll32_x86_only_mapped = (HMODULE)MapImage(szNtDll32Name_x86);
         if (hmod_ntdll32_x86_only_mapped == NULL)
         {
             return -9;
@@ -105,8 +105,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
             DWORD num = *(DWORD*)&pcbCode[1];
             *pHeavensGateNum = num;
         }
-        UnmapViewOfFile(hmod_ntdll32_x86_only_mapped);
-        hmod_ntdll32_x86_only_mapped = NULL;
+        UnmapImage(hmod_ntdll32_x86_only_mapped);
     }
 
     PVOID64* pWow64SystemServiceEx_O = (PVOID64*)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_wow64ext_only_mapped, "Wow64SystemServiceEx_O");
@@ -145,7 +144,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
             TCHAR szNtDll64Name[MAX_PATH];
             szNtDll64Name[0] = 0;
             _sntprintf(szNtDll64Name, _countof(szNtDll64Name), _T("%s\\System32\\ntdll.dll"), _tgetenv(_T("windir")));
-            hmod_ntdll64_only_mapped = (HMODULE)MapBinary(szNtDll64Name);
+            hmod_ntdll64_only_mapped = (HMODULE)MapImage(szNtDll64Name);
 
             Wow64RevertWow64FsRedirection(OldValue);
         }
@@ -156,8 +155,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
     }
     else
     {
-        UnmapViewOfFile(hmod_ntdll64_only_mapped);
-        hmod_ntdll64_only_mapped = NULL;
+        UnmapImage(hmod_ntdll64_only_mapped);
     }
 
     HMODULE hDstMod = (HMODULE)GetProcessModuleHandle64(cur_process, pDstModName);
@@ -255,8 +253,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
     }
     if (!bToStart)
     {
-        UnmapViewOfFile(hmod_wow64ext_only_mapped);
-        hmod_wow64ext_only_mapped = NULL;
+        UnmapImage(hmod_wow64ext_only_mapped);
 
         CloseHandle(cur_process);
         cur_process = NULL;

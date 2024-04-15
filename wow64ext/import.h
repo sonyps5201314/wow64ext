@@ -499,10 +499,9 @@ __clean__:
     return pRet;
 }
 
-//https://github.com/hryuk/Carberp/blob/master/source%20-%20absource/pro/all%20source/anti_rapport/antirapport.cpp
-static PVOID MapBinary(LPCTSTR Path)
+static PVOID MapImage(LPCTSTR Path)
 {
-    LPVOID Map = NULL;
+    LPVOID pMapView = NULL;
     HANDLE hMapping;
     HANDLE hFile;
 
@@ -512,7 +511,7 @@ static PVOID MapBinary(LPCTSTR Path)
         hMapping = CreateFileMapping(hFile, 0, PAGE_READONLY | SEC_IMAGE, 0, 0, 0);
         if (hMapping != NULL)
         {
-            Map = MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, 0);
+            pMapView = MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, 0);
 
             CloseHandle(hMapping);
         }
@@ -520,8 +519,10 @@ static PVOID MapBinary(LPCTSTR Path)
         CloseHandle(hFile);
     }
 
-    return Map;
+    return pMapView;
 }
+
+#define UnmapImage(pMapView)  { if(pMapView) { UnmapViewOfFile (pMapView); (pMapView) = NULL; } }
 
 __if_not_exists(GetWow64ExtFileName)
 {
