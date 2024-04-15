@@ -68,24 +68,29 @@ typedef struct _PROCESS_BASIC_INFORMATION64
     PVOID64 Reserved3;
 } PROCESS_BASIC_INFORMATION64, * PPROCESS_BASIC_INFORMATION64;
 
-static DWORD64 GetProcessModuleHandle(HANDLE hProcess, LPCWSTR lpModuleName)
+static DWORD_PTR FindProcessModule(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL*/ OPTIONAL, HMODULE hModule /*= NULL*/ OPTIONAL, OUT LPWSTR lpModuleFullPath /*= NULL*/ OPTIONAL, DWORD nModuleFullPathLen /*= 0*/ OPTIONAL)
 {
     ATLASSERT(hProcess);
-    ATLASSERT(lpModuleName);
-    if (!hProcess || !lpModuleName)
+    ATLASSERT(lpModuleName || hModule);
+    if (!hProcess || (!lpModuleName && !hModule))
     {
         return NULL;
     }
 
     DWORD dwProcessId = GetProcessId(hProcess);
 
-    DWORD64 hModule = 0;
+    DWORD_PTR dwResult = 0;
 
     HANDLE hModuleSnap = INVALID_HANDLE_VALUE;
     MODULEENTRY32W me32 =
     {
         0
     };
+
+    if (lpModuleFullPath && nModuleFullPathLen > 0)
+    {
+        lpModuleFullPath[0] = 0;
+    }
 
 
     // Take a snapshot of all modules in the specified process.
@@ -128,17 +133,47 @@ static DWORD64 GetProcessModuleHandle(HANDLE hProcess, LPCWSTR lpModuleName)
     // interest. Then copy the information to the buffer pointed
     // to by lpMe32 so that it can be returned to the caller.
 
-    BOOL bCompareFullPath = !PathIsRelativeW(lpModuleName);
+    BOOL bFindByName = lpModuleName != NULL;
+    BOOL bCompareFullPath = FALSE;
+    if (bFindByName)
+    {
+        bCompareFullPath = !PathIsRelativeW(lpModuleName);
+    }
 
     if (Module32FirstW(hModuleSnap, &me32))
     {
         do
         {
-            LPCWSTR pszName = bCompareFullPath ? me32.szExePath : me32.szModule;
-            if (!_wcsicmp(pszName, lpModuleName))
+            if (bFindByName)
             {
-                hModule = (DWORD64)me32.hModule;
-                break;
+                LPCWSTR pszName = bCompareFullPath ? me32.szExePath : me32.szModule;
+                if (!_wcsicmp(pszName, lpModuleName))
+                {
+                    DWORD len = 0;
+                    if (lpModuleFullPath && nModuleFullPathLen > 0)
+                    {
+                        len = (DWORD)__min(nModuleFullPathLen, wcslen(me32.szExePath));
+                        memcpy(lpModuleFullPath, me32.szExePath, len * sizeof(WCHAR));
+                        if (len < nModuleFullPathLen) lpModuleFullPath[len] = 0;
+                    }
+                    dwResult = (DWORD_PTR)me32.hModule;
+                    break;
+                }
+            }
+            else
+            {
+                if (me32.hModule == hModule)
+                {
+                    DWORD len = 0;
+                    if (lpModuleFullPath && nModuleFullPathLen > 0)
+                    {
+                        len = (DWORD)__min(nModuleFullPathLen, wcslen(me32.szExePath));
+                        memcpy(lpModuleFullPath, me32.szExePath, len * sizeof(WCHAR));
+                        if (len < nModuleFullPathLen) lpModuleFullPath[len] = 0;
+                    }
+                    dwResult = len;
+                    break;
+                }
             }
         } while (Module32NextW(hModuleSnap, &me32));
     }
@@ -157,18 +192,28 @@ static DWORD64 GetProcessModuleHandle(HANDLE hProcess, LPCWSTR lpModuleName)
     }
 
 
-    return hModule;
+    return dwResult;
+}
+
+static HMODULE GetProcessModuleHandle(HANDLE hProcess, LPCWSTR lpModuleName)
+{
+    return (HMODULE)FindProcessModule(hProcess, lpModuleName, NULL, NULL, 0);
+}
+
+static DWORD GetProcessModuleFileName(HANDLE hProcess, HMODULE hModule, LPWSTR lpFilename, DWORD nSize)
+{
+    return (DWORD)FindProcessModule(hProcess, NULL, hModule, lpFilename, nSize);
 }
 
 extern NTSTATUS(NTAPI* _NtReadVirtualMemory64)(IN HANDLE ProcessHandle, IN PVOID64 BaseAddress, OUT PVOID Buffer, IN UINT64 NumberOfBytesToRead, OUT PUINT64 NumberOfBytesReaded);
 extern NTSTATUS(NTAPI* _NtQueryInformationProcess64)(IN HANDLE ProcessHandle,
     IN PROCESSINFOCLASS ProcessInformationClass, OUT PVOID ProcessInformation,
     IN ULONG ProcessInformationLength, OUT PULONG ReturnLength OPTIONAL);
-static DWORD64 FindProcessModule64(HANDLE hProcess, LPCWSTR lpModuleName, OUT LPWSTR lpModuleFullPath /*= NULL*/ OPTIONAL, DWORD nModuleFullPathLen /*= 0*/ OPTIONAL)
+static DWORD64 FindProcessModule64(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL*/ OPTIONAL, PVOID64 hModule /*= NULL*/ OPTIONAL, OUT LPWSTR lpModuleFullPath /*= NULL*/ OPTIONAL, DWORD nModuleFullPathLen /*= 0*/ OPTIONAL)
 {
     ATLASSERT(hProcess);
-    ATLASSERT(lpModuleName);
-    if (!hProcess || !lpModuleName)
+    ATLASSERT(lpModuleName || hModule);
+    if (!hProcess || (!lpModuleName && !hModule))
     {
         return NULL;
     }
@@ -205,7 +250,12 @@ static DWORD64 FindProcessModule64(HANDLE hProcess, LPCWSTR lpModuleName, OUT LP
         return NULL;
     }
 
-    BOOL bCompareFullPath = !PathIsRelativeW(lpModuleName);
+    BOOL bFindByName = lpModuleName != NULL;
+    BOOL bCompareFullPath = FALSE;
+    if (bFindByName)
+    {
+        bCompareFullPath = !PathIsRelativeW(lpModuleName);
+    }
 
     PROCESS_BASIC_INFORMATION64 pbi64;
 
@@ -281,29 +331,33 @@ static DWORD64 FindProcessModule64(HANDLE hProcess, LPCWSTR lpModuleName, OUT LP
             }
             //wprintf(L"0x%I64x %s\n", module_info.DllBase, wFullDllName);
 
-            if (bCompareFullPath)
+            if (bFindByName)
             {
-                if (!_wcsnicmp(wFullDllName, lpModuleName, _countof(wFullDllName)))
+                LPCWSTR pszName = bCompareFullPath ? wFullDllName : PathFindFileNameW(wFullDllName);
+                if (!_wcsicmp(pszName, lpModuleName))
                 {
+                    DWORD len = 0;
                     if (lpModuleFullPath && nModuleFullPathLen > 0)
                     {
-                        wcsncpy(lpModuleFullPath, wFullDllName, nModuleFullPathLen);
-                        lpModuleFullPath[nModuleFullPathLen - 1] = 0;
+                        len = (DWORD)__min(nModuleFullPathLen, wcslen(wFullDllName));
+                        memcpy(lpModuleFullPath, wFullDllName, len * sizeof(WCHAR));
+                        if (len < nModuleFullPathLen) lpModuleFullPath[len] = 0;
                     }
                     return (DWORD64)module_info.DllBase;
                 }
             }
             else
             {
-                LPCWSTR pszDllName = PathFindFileNameW(wFullDllName);
-                if (!_wcsicmp(pszDllName, lpModuleName))
+                if (module_info.DllBase == hModule)
                 {
+                    DWORD len = 0;
                     if (lpModuleFullPath && nModuleFullPathLen > 0)
                     {
-                        wcsncpy(lpModuleFullPath, wFullDllName, nModuleFullPathLen);
-                        lpModuleFullPath[nModuleFullPathLen - 1] = 0;
+                        len = (DWORD)__min(nModuleFullPathLen, wcslen(wFullDllName));
+                        memcpy(lpModuleFullPath, wFullDllName, len * sizeof(WCHAR));
+                        if (len < nModuleFullPathLen) lpModuleFullPath[len] = 0;
                     }
-                    return (DWORD64)module_info.DllBase;
+                    return len;
                 }
             }
 
@@ -316,7 +370,12 @@ static DWORD64 FindProcessModule64(HANDLE hProcess, LPCWSTR lpModuleName, OUT LP
 
 static DWORD64 GetProcessModuleHandle64(HANDLE hProcess, LPCWSTR lpModuleName)
 {
-    return FindProcessModule64(hProcess, lpModuleName, NULL, 0);
+    return FindProcessModule64(hProcess, lpModuleName, NULL, NULL, 0);
+}
+
+static DWORD64 GetProcessModuleFileName64(HANDLE hProcess, PVOID64 hModule, LPWSTR lpFilename, DWORD nSize)
+{
+    return FindProcessModule64(hProcess, NULL, hModule, lpFilename, nSize);
 }
 
 template<typename IMAGE_NT_HEADERS_T>
@@ -468,7 +527,7 @@ DWORD64 GetProcAddressByImageExportDirectoryT(HANDLE hProcess, DWORD64 hModule, 
                 }
                 else if (sizeof(IMAGE_NT_HEADERS_T) == sizeof(IMAGE_NT_HEADERS32))
                 {
-                    h = GetProcessModuleHandle(hProcess, CA2W(pTempDll));
+                    h = (DWORD64)GetProcessModuleHandle(hProcess, CA2W(pTempDll));
                 }
                 else
                 {
