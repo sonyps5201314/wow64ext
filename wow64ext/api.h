@@ -300,7 +300,7 @@ static DWORD64 Wow64Ext_CallNative64BitFunction(DWORD64 func, int argC, ...)
     }
     va_end(args);
 
-    NTSTATUS ntStatus = _NtReadVirtualMemory64(NtCurrentProcess(), (PVOID64)0x975787875797CAB1, (PVOID)0x16895188, 0x9090950C0FEF00D, (PUINT64)&callInfo);
+    NTSTATUS ntStatus = _NtWow64ReadVirtualMemory64(NtCurrentProcess(), (PVOID64)0x975787875797CAB1, (PVOID)0x16895188, 0x9090950C0FEF00D, (PUINT64)&callInfo);
     return callInfo.result;
 }
 
