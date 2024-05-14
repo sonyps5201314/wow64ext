@@ -69,6 +69,11 @@ typedef struct _PROCESS_BASIC_INFORMATION64
     PVOID64 Reserved3;
 } PROCESS_BASIC_INFORMATION64, * PPROCESS_BASIC_INFORMATION64;
 
+__if_exists(ApiSetSchema)
+{
+    extern ApiSetSchema* pApiSetSchema;
+}
+
 static DWORD_PTR FindProcessModule(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL*/ OPTIONAL, HMODULE hModule /*= NULL*/ OPTIONAL, OUT LPWSTR lpModuleFullPath /*= NULL*/ OPTIONAL, DWORD nModuleFullPathLen /*= 0*/ OPTIONAL)
 {
     ATLASSERT(hProcess);
@@ -93,6 +98,30 @@ static DWORD_PTR FindProcessModule(HANDLE hProcess, LPCWSTR lpModuleName /*= NUL
         lpModuleFullPath[0] = 0;
     }
 
+
+    BOOL bFindByName = lpModuleName != NULL;
+    BOOL bCompareFullPath = FALSE;
+    if (bFindByName)
+    {
+        bCompareFullPath = !PathIsRelativeW(lpModuleName);
+
+        __if_exists(ApiSetSchema)
+        {
+            if (!bCompareFullPath)
+            {
+                if (pApiSetSchema)
+                {
+                    CString strOldDllTitleName = GetFileTitleName(lpModuleName);
+                    ApiSetTarget* pApiSetTarget = pApiSetSchema->Lookup(strOldDllTitleName);
+                    if (pApiSetTarget)
+                    {
+                        CString strNewDllName = pApiSetTarget->GetAt(0);
+                        return FindProcessModule(hProcess, CT2W(strNewDllName), hModule, lpModuleFullPath, nModuleFullPathLen);
+                    }
+                }
+            }
+        }
+    }
 
     // Take a snapshot of all modules in the specified process.
     //https://github.com/baldurk/renderdoc/blob/7ef73f92ef19d3dfc325a52aba6912386433bec9/renderdoc/os/win32/win32_process.cpp
@@ -133,13 +162,6 @@ static DWORD_PTR FindProcessModule(HANDLE hProcess, LPCWSTR lpModuleName /*= NUL
     // Walk the module list of the process, and find the module of
     // interest. Then copy the information to the buffer pointed
     // to by lpMe32 so that it can be returned to the caller.
-
-    BOOL bFindByName = lpModuleName != NULL;
-    BOOL bCompareFullPath = FALSE;
-    if (bFindByName)
-    {
-        bCompareFullPath = !PathIsRelativeW(lpModuleName);
-    }
 
     if (Module32FirstW(hModuleSnap, &me32))
     {
@@ -291,6 +313,23 @@ static DWORD64 FindProcessModule64(HANDLE hProcess, LPCWSTR lpModuleName /*= NUL
     if (bFindByName)
     {
         bCompareFullPath = !PathIsRelativeW(lpModuleName);
+
+        __if_exists(ApiSetSchema)
+        {
+            if (!bCompareFullPath)
+            {
+                if (pApiSetSchema)
+                {
+                    CString strOldDllTitleName = GetFileTitleName(lpModuleName);
+                    ApiSetTarget* pApiSetTarget = pApiSetSchema->Lookup(strOldDllTitleName);
+                    if (pApiSetTarget)
+                    {
+                        CString strNewDllName = pApiSetTarget->GetAt(0);
+                        return FindProcessModule64(hProcess, CT2W(strNewDllName), hModule, lpModuleFullPath, nModuleFullPathLen);
+                    }
+                }
+            }
+        }
     }
 
     PROCESS_BASIC_INFORMATION64 pbi64;

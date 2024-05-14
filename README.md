@@ -4,6 +4,8 @@ WOW64Ext is a helper library for x86/arm32 programs that runs under WOW64 layer 
 ## prior project:
 https://github.com/sonyps5201314/ntdll
 
+https://github.com/sonyps5201314/RemoveApiSets [Optional]
+
 ## refer to:
 https://gitlab.winehq.org/wine/wine
 

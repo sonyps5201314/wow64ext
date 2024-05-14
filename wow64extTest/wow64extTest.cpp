@@ -14,6 +14,11 @@
 
 #pragma comment(lib, "ntdll.lib")
 
+#ifdef HAS_RemoveApiSets
+#include "RemoveApiSets\Misc.cpp"
+#include "RemoveApiSets\Phlib.cpp"
+#endif
+
 #include "..\wow64ext\wow64ext.h"
 #include "..\wow64ext\import.cpp"
 
@@ -28,6 +33,13 @@ int main()
         printf("cannot open process, %u\r\n", GetLastError());
         return -1;
     }
+
+#ifdef HAS_RemoveApiSets
+    pApiSetSchema = GetApiSetSchema();
+    HMODULE hmod = GetProcessModuleHandle(hProcess, _T("api-ms-win-core-com-l1-1-0.dll"));
+    delete pApiSetSchema;
+    pApiSetSchema = NULL;
+#endif
 
     HMODULE hmod_ntdll32 = GetModuleHandle(_T("ntdll.dll"));
     if (!hmod_ntdll32)

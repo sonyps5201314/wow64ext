@@ -8,3 +8,8 @@ HANDLE cur_process;
 HMODULE hmod_wow64ext_only_mapped;
 DWORD64 hmod_ntdll64;
 HMODULE hmod_ntdll64_only_mapped;
+
+__if_exists(ApiSetSchema)
+{
+	ApiSetSchema* pApiSetSchema;
+}
