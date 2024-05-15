@@ -36,7 +36,9 @@ int main()
 
 #ifdef HAS_RemoveApiSets
     pApiSetSchema = GetApiSetSchema();
-    HMODULE hmod = GetProcessModuleHandle(hProcess, _T("api-ms-win-core-com-l1-1-0.dll"));
+    HMODULE hmod1 = GetProcessModuleHandle_WithLock(hProcess, _T("api-ms-win-core-com-l1-1-0.dll"));
+    HMODULE hmod2 = GetProcessModuleHandle_NoLock(hProcess, _T("api-ms-win-core-com-l1-1-0.dll"));
+    ATLASSERT(hmod1 == hmod2);
     delete pApiSetSchema;
     pApiSetSchema = NULL;
 #endif

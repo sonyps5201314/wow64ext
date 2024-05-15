@@ -118,7 +118,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
 
     if (bToStart)
     {
-        hmod_ntdll64 = (DWORD64)GetProcessModuleHandle64(cur_process, L"ntdll.dll");
+        hmod_ntdll64 = (DWORD64)GetProcessModuleHandle64_NoLock(cur_process, L"ntdll.dll");
         if (hmod_ntdll64 == NULL)
         {
             return -11;
@@ -158,7 +158,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         UnmapImage(hmod_ntdll64_only_mapped);
     }
 
-    HMODULE hDstMod = (HMODULE)GetProcessModuleHandle64(cur_process, pDstModName);
+    HMODULE hDstMod = (HMODULE)GetProcessModuleHandle64_NoLock(cur_process, pDstModName);
     if (hDstMod == NULL)
     {
         return 1;
