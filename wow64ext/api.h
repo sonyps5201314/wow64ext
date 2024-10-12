@@ -83,6 +83,11 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         return -8;
     }
 
+    if (bToStart)
+    {
+        FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs();
+    }
+
     UINT* pHeavensGateNum = (UINT*)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_wow64ext_only_mapped, "HeavensGateNum");
     if (bToStart)
     {

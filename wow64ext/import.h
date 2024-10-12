@@ -277,16 +277,8 @@ static NTSTATUS NTAPI NtReadVirtualMemory64(IN HANDLE ProcessHandle, IN PVOID64 
 typedef NTSTATUS(NTAPI* NtQueryInformationProcess_T)(IN HANDLE ProcessHandle, IN PROCESSINFOCLASS ProcessInformationClass, OUT PVOID ProcessInformation, IN ULONG ProcessInformationLength, OUT PULONG ReturnLength OPTIONAL);
 typedef NTSTATUS(NTAPI* NtReadVirtualMemory64_T)(IN HANDLE ProcessHandle, IN PVOID64 BaseAddress, OUT PVOID Buffer, IN UINT64 NumberOfBytesToRead, OUT PUINT64 NumberOfBytesReaded);
 typedef NTSTATUS(NTAPI* NtReadVirtualMemory_T)(IN HANDLE ProcessHandle, IN PVOID BaseAddress, OUT PVOID Buffer, IN SIZE_T BufferSize, OUT PSIZE_T NumberOfBytesRead OPTIONAL);
-template<typename PVOID_T, typename DWORD_T, typename SIZE_T_T, typename PROCESS_BASIC_INFORMATION_T, typename PEB_T, typename PEB_LDR_DATA_T, typename LDR_DATA_TABLE_ENTRY_T, typename NtReadVirtualMemoryXX_T, BOOL for64>
-DWORD_T FindProcessModuleT_NoLock(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL*/ OPTIONAL, PVOID_T hModule /*= NULL*/ OPTIONAL, OUT LPWSTR lpModuleFullPath /*= NULL*/ OPTIONAL, DWORD nModuleFullPathLen /*= 0*/ OPTIONAL)
+static void FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs()
 {
-    ATLASSERT(hProcess);
-    ATLASSERT(lpModuleName || hModule);
-    if (!hProcess || (!lpModuleName && !hModule))
-    {
-        return NULL;
-    }
-
     if ((_NtWow64QueryInformationProcess64 == NULL && _NtQueryInformationProcess == NULL) || (_NtWow64ReadVirtualMemory64 == NULL && _NtReadVirtualMemory == NULL))
     {
         HMODULE hmod_ntdll = GetModuleHandle(_T("ntdll.dll"));
@@ -307,6 +299,16 @@ DWORD_T FindProcessModuleT_NoLock(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL
                     GetProcAddress(hmod_ntdll, "NtWow64ReadVirtualMemory64");
             }
         }
+    }
+}
+template<typename PVOID_T, typename DWORD_T, typename SIZE_T_T, typename PROCESS_BASIC_INFORMATION_T, typename PEB_T, typename PEB_LDR_DATA_T, typename LDR_DATA_TABLE_ENTRY_T, typename NtReadVirtualMemoryXX_T, BOOL for64>
+DWORD_T FindProcessModuleT_NoLock(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL*/ OPTIONAL, PVOID_T hModule /*= NULL*/ OPTIONAL, OUT LPWSTR lpModuleFullPath /*= NULL*/ OPTIONAL, DWORD nModuleFullPathLen /*= 0*/ OPTIONAL)
+{
+    ATLASSERT(hProcess);
+    ATLASSERT(lpModuleName || hModule);
+    if (!hProcess || (!lpModuleName && !hModule))
+    {
+        return NULL;
     }
 
     if ((_NtWow64QueryInformationProcess64 == NULL && _NtQueryInformationProcess == NULL) || (_NtWow64ReadVirtualMemory64 == NULL && _NtReadVirtualMemory == NULL))
@@ -483,17 +485,10 @@ static DWORD GetProcessModuleFileName_NoLock(HANDLE hProcess, HMODULE hModule, L
     return (DWORD)FindProcessModuleT_NoLock<PVOID, DWORD_PTR, SIZE_T, PROCESS_BASIC_INFORMATION, PEB, PEB_LDR_DATA, LDR_DATA_TABLE_ENTRY, NtReadVirtualMemory_T, FALSE>(hProcess, NULL, hModule, lpFilename, nSize);
 }
 
-template<typename IMAGE_NT_HEADERS_T>
-DWORD64 GetProcAddressByImageExportDirectoryT(HANDLE hProcess, DWORD64 hModule, LPCSTR lpProcName)
+//After calling FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs, there is no need to call GetProcAddressByImageExportDirectoryT__CheckForPrepareFunctionPtrs,
+//because GetProcAddressByImageExportDirectoryT__CheckForPrepareFunctionPtrs already contains the preparation of the following function pointer values
+static void GetProcAddressByImageExportDirectoryT__CheckForPrepareFunctionPtrs()
 {
-    ATLASSERT(hProcess);
-    ATLASSERT(hModule);
-    ATLASSERT(lpProcName);
-    if (!hProcess || !hModule || !lpProcName)
-    {
-        return NULL;
-    }
-
     if (_NtWow64ReadVirtualMemory64 == NULL && _NtReadVirtualMemory == NULL)
     {
         HMODULE hmod_ntdll = GetModuleHandle(_T("ntdll.dll"));
@@ -512,6 +507,17 @@ DWORD64 GetProcAddressByImageExportDirectoryT(HANDLE hProcess, DWORD64 hModule, 
                     GetProcAddress(hmod_ntdll, "NtReadVirtualMemory");
             }
         }
+    }
+}
+template<typename IMAGE_NT_HEADERS_T>
+DWORD64 GetProcAddressByImageExportDirectoryT(HANDLE hProcess, DWORD64 hModule, LPCSTR lpProcName)
+{
+    ATLASSERT(hProcess);
+    ATLASSERT(hModule);
+    ATLASSERT(lpProcName);
+    if (!hProcess || !hModule || !lpProcName)
+    {
+        return NULL;
     }
 
     if (_NtWow64ReadVirtualMemory64 == NULL && _NtReadVirtualMemory == NULL)
