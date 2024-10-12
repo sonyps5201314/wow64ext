@@ -1,8 +1,12 @@
 #pragma once
 
+#ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#endif
 
+#ifndef _ATL_XP_TARGETING
 #define _ATL_XP_TARGETING
+#endif
 
 #include <stdio.h>
 #include <windows.h>
