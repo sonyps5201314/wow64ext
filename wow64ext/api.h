@@ -85,7 +85,10 @@ static int Wow64Ext_DoWork(BOOL bToStart)
 
     if (bToStart)
     {
-        FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs();
+        if (!FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs())
+        {
+            return -9;
+        }
     }
 
     UINT* pHeavensGateNum = (UINT*)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_wow64ext_only_mapped, "HeavensGateNum");
@@ -101,7 +104,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         HMODULE hmod_ntdll32_x86_only_mapped = (HMODULE)MapImage(szNtDll32Name_x86);
         if (hmod_ntdll32_x86_only_mapped == NULL)
         {
-            return -9;
+            return -10;
         }
         PBYTE pcbCode = (PBYTE)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS32>(cur_process, (DWORD64)hmod_ntdll32_x86_only_mapped, "NtWow64ReadVirtualMemory64");
         // B8 F5 01 00 00          mov     eax, 1F5h       ; NtWow64ReadVirtualMemory64
@@ -116,7 +119,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
     PVOID64* pWow64SystemServiceEx_O = (PVOID64*)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_wow64ext_only_mapped, "Wow64SystemServiceEx_O");
     if (!bToStart && *pWow64SystemServiceEx_O == NULL)
     {
-        return -10;
+        return -11;
     }
     PVOID Wow64SystemServiceEx_M = (PVOID)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_wow64ext_only_mapped, "Wow64SystemServiceEx_M");
     PVOID pNewFunction = Wow64SystemServiceEx_M;
@@ -126,7 +129,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         hmod_ntdll64 = (DWORD64)GetProcessModuleHandle64_NoLock(cur_process, L"ntdll.dll");
         if (hmod_ntdll64 == NULL)
         {
-            return -11;
+            return -12;
         }
     }
     else
@@ -140,7 +143,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         ATLASSERT(hmod_ntdll64_only_mapped == NULL);
         if (hmod_ntdll64_only_mapped != NULL)
         {
-            return -12;
+            return -13;
         }
         PVOID OldValue;
         BOOL bRet = Wow64DisableWow64FsRedirection(&OldValue);
@@ -155,7 +158,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         }
         if (hmod_ntdll64_only_mapped == NULL)
         {
-            return -13;
+            return -14;
         }
     }
     else
