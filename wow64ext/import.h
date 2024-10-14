@@ -19,7 +19,13 @@
 
 #include "shared.h"
 
+#pragma comment(lib, "ntdll.lib")
 #pragma comment(lib, "shlwapi.lib")
+
+#ifndef PROCESSOR_ARCHITECTURE_ARM64
+#define PROCESSOR_ARCHITECTURE_ARM64            12
+#endif
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 typedef struct _PEB_LDR_DATA64

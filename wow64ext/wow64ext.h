@@ -101,6 +101,47 @@ static BOOL VirtualProtectEx64(HANDLE hProcess, DWORD64 lpAddress, SIZE_T dwSize
 }
 
 #ifndef _WIN64
+
+__if_not_exists(M128A)
+{
+    typedef struct DECLSPEC_ALIGN(16) _M128A {
+        ULONGLONG Low;
+        LONGLONG High;
+    } M128A, * PM128A;
+}
+
+__if_not_exists(XSAVE_FORMAT)
+{
+    typedef struct DECLSPEC_ALIGN(16) _XSAVE_FORMAT {
+        WORD   ControlWord;
+        WORD   StatusWord;
+        BYTE  TagWord;
+        BYTE  Reserved1;
+        WORD   ErrorOpcode;
+        DWORD ErrorOffset;
+        WORD   ErrorSelector;
+        WORD   Reserved2;
+        DWORD DataOffset;
+        WORD   DataSelector;
+        WORD   Reserved3;
+        DWORD MxCsr;
+        DWORD MxCsr_Mask;
+        M128A FloatRegisters[8];
+
+#if defined(_WIN64)
+
+        M128A XmmRegisters[16];
+        BYTE  Reserved4[96];
+
+#else
+
+        M128A XmmRegisters[8];
+        BYTE  Reserved4[224];
+
+#endif
+
+    } XSAVE_FORMAT, * PXSAVE_FORMAT;
+}
 typedef XSAVE_FORMAT XMM_SAVE_AREA32, * PXMM_SAVE_AREA32;
 #endif
 
