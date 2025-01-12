@@ -91,7 +91,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         }
     }
 
-    UINT* pHeavensGateNum = (UINT*)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_wow64ext_only_mapped, "HeavensGateNum");
+    UINT* pHeavensGateNum = (UINT*)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, HANDLE_TO_DWORD64(hmod_wow64ext_only_mapped), "HeavensGateNum");
     if (bToStart)
     {
         // Temporarily map loading the x86 version's ntdll.dll to prevent NtWow64ReadVirtualMemory64 from being hooked
@@ -106,7 +106,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         {
             return -10;
         }
-        PBYTE pcbCode = (PBYTE)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS32>(cur_process, (DWORD64)hmod_ntdll32_x86_only_mapped, "NtWow64ReadVirtualMemory64");
+        PBYTE pcbCode = (PBYTE)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS32>(cur_process, HANDLE_TO_DWORD64(hmod_ntdll32_x86_only_mapped), "NtWow64ReadVirtualMemory64");
         // B8 F5 01 00 00          mov     eax, 1F5h       ; NtWow64ReadVirtualMemory64
         if (pcbCode[0] == 0xB8)
         {
@@ -116,12 +116,12 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         UnmapImage(hmod_ntdll32_x86_only_mapped);
     }
 
-    PVOID64* pWow64SystemServiceEx_O = (PVOID64*)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_wow64ext_only_mapped, "Wow64SystemServiceEx_O");
+    PVOID64* pWow64SystemServiceEx_O = (PVOID64*)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, HANDLE_TO_DWORD64(hmod_wow64ext_only_mapped), "Wow64SystemServiceEx_O");
     if (!bToStart && *pWow64SystemServiceEx_O == NULL)
     {
         return -11;
     }
-    PVOID Wow64SystemServiceEx_M = (PVOID)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_wow64ext_only_mapped, "Wow64SystemServiceEx_M");
+    PVOID Wow64SystemServiceEx_M = (PVOID)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, HANDLE_TO_DWORD64(hmod_wow64ext_only_mapped), "Wow64SystemServiceEx_M");
     PVOID pNewFunction = Wow64SystemServiceEx_M;
 
     if (bToStart)
@@ -251,7 +251,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
         if (bToStart)
         {
             *pWow64SystemServiceEx_O = lpFunction;
-            pFunctionAddressThunk->u1.Function = (ULONGLONG)pNewFunction;
+            pFunctionAddressThunk->u1.Function = (ULONGLONG)PTR_TO_DWORD64(pNewFunction);
         }
         else
         {
@@ -277,7 +277,7 @@ static DWORD64 Wow64Ext_GetNative64BitNtDllProcAddress(LPCSTR name)
         ATLASSERT(hmod_ntdll64 && hmod_ntdll64_only_mapped);
         return 0;
     }
-    DWORD dwFuncIn32 = (DWORD)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, (DWORD64)hmod_ntdll64_only_mapped, name);
+    DWORD dwFuncIn32 = (DWORD)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, HANDLE_TO_DWORD64(hmod_ntdll64_only_mapped), name);
     if (dwFuncIn32 == 0)
     {
         ATLASSERT(dwFuncIn32);

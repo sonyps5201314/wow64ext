@@ -28,6 +28,7 @@ int main()
     printf("\r\n");
 
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE, FALSE, GetCurrentProcessId());
+    // If the target process is the current process, using the pseudo handle returned by GetCurrentProcess() is now also supported
     if (hProcess == NULL)
     {
         printf("cannot open process, %u\r\n", GetLastError());
@@ -67,7 +68,7 @@ int main()
         DWORD64 ret_len = 0;
         MEMORY_BASIC_INFORMATION64 mbi = { 0 };
         DWORD64 pfn = Wow64Ext_GetNative64BitNtDllProcAddress("NtQueryVirtualMemory");
-        DWORD64 ntStatus = Wow64Ext_CallNative64BitFunction(pfn, 6, (DWORD64)hProcess, (DWORD64)main, (DWORD64)MemoryBasicInformation, (DWORD64)&mbi, (DWORD64)sizeof(mbi), (DWORD64)&ret_len);
+        DWORD64 ntStatus = Wow64Ext_CallNative64BitFunction(pfn, 6, HANDLE_TO_DWORD64(hProcess), PTR_TO_DWORD64(main), (DWORD64)MemoryBasicInformation, PTR_TO_DWORD64(&mbi), (DWORD64)sizeof(mbi), PTR_TO_DWORD64(&ret_len));
         printf("[NATIVE]NtQueryVirtualMemory ntStatus=%I64d BaseAddress=0x%I64X\r\n", ntStatus, mbi.BaseAddress);
 
         // wow64ext classic APIs test
@@ -78,7 +79,7 @@ int main()
             DWORD64 pfn = GetProcAddress64(hmod64, "Wow64SystemServiceEx");
             printf("[wow64ext]GetProcAddress64 result=0x%I64X\r\n", pfn);
             SIZE_T ret_len32 = VirtualQueryEx64(hProcess, pfn, &mbi, sizeof(mbi));
-            printf("[wow64ext]VirtualQueryEx64 result=0x%X BaseAddress=0x%I64X\r\n", ret_len32, mbi.BaseAddress);
+            printf("[wow64ext]VirtualQueryEx64 result=0x%IX BaseAddress=0x%I64X\r\n", ret_len32, mbi.BaseAddress);
             DWORD64 pcbAllocCode = VirtualAllocEx64(hProcess, NULL, 64, MEM_COMMIT | MEM_TOP_DOWN, PAGE_EXECUTE_READWRITE);
             printf("[wow64ext]VirtualAllocEx64 result=0x%I64X\r\n", pcbAllocCode);
             DWORD dwOldProtect;

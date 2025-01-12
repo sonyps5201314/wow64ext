@@ -12,5 +12,5 @@ HMODULE hmod_ntdll64_only_mapped;
 
 __if_exists(ApiSetSchema)
 {
-	ApiSetSchema* pApiSetSchema;
+    ApiSetSchema* pApiSetSchema;
 }

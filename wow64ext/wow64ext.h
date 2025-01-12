@@ -1,5 +1,23 @@
 #pragma once
 
+#ifndef __DISABLE_ERROR_ON_LARGEADDRESSAWARE_COMPATIBILITY_CHECK_FAILED__
+#pragma warning( error : 4826 )
+#elif !defined(__DISABLE_WARNING_ON_LARGEADDRESSAWARE_COMPATIBILITY_CHECK_FAILED__)
+#pragma warning( default : 4826 )
+#endif
+
+// Without the double casting, the pointer is sign extended, not zero extended,
+// which leads to invalid addresses with /LARGEADDRESSAWARE.
+#define PTR_TO_DWORD64(p) ((DWORD64)(ULONG_PTR)(p))
+
+// Sign-extension is required for pseudo handles such as the handle returned
+// from GetCurrentProcess().
+// "64-bit versions of Windows use 32-bit handles for interoperability [...] it
+// is safe to [...] sign-extend the handle (when passing it from 32-bit to
+// 64-bit)."
+// https://docs.microsoft.com/en-us/windows/win32/winprog64/interprocess-communication
+#define HANDLE_TO_DWORD64(p) ((DWORD64)(LONG_PTR)(p))
+
 #include "api.h"
 
 // wow64ext classic APIs
@@ -37,8 +55,8 @@ static DWORD64 GetModuleHandle64(const wchar_t* lpModuleName)
 
     ldr_flags |= LDR_GET_DLL_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
 
-    Wow64Ext_CallNative64BitNtDllFunctionByName("RtlInitUnicodeString", 2, (DWORD64)&wstr, (DWORD64)lpModuleName);
-    status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("LdrGetDllHandleEx", 5, (DWORD64)ldr_flags, (DWORD64)NULL, (DWORD64)NULL, (DWORD64)&wstr, (DWORD64)&ret);
+    Wow64Ext_CallNative64BitNtDllFunctionByName("RtlInitUnicodeString", 2, PTR_TO_DWORD64(&wstr), PTR_TO_DWORD64(lpModuleName));
+    status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("LdrGetDllHandleEx", 5, (DWORD64)ldr_flags, (DWORD64)NULL, (DWORD64)NULL, PTR_TO_DWORD64(&wstr), PTR_TO_DWORD64(&ret));
 
     set_ntstatus(status);
 
@@ -52,10 +70,10 @@ static DWORD64 GetProcAddress64(DWORD64 hModule, const char* funcName)
 
     if ((ULONG_PTR)funcName >> 16)
     {
-        Wow64Ext_CallNative64BitNtDllFunctionByName("RtlInitAnsiString", 2, (DWORD64)&str, (DWORD64)funcName);
-        if (!set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("LdrGetProcedureAddress", 4, hModule, (DWORD64)&str, (DWORD64)0, (DWORD64)(void**)&proc))) return NULL;
+        Wow64Ext_CallNative64BitNtDllFunctionByName("RtlInitAnsiString", 2, PTR_TO_DWORD64(&str), PTR_TO_DWORD64(funcName));
+        if (!set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("LdrGetProcedureAddress", 4, hModule, PTR_TO_DWORD64(&str), (DWORD64)0, PTR_TO_DWORD64((void**)&proc)))) return NULL;
     }
-    else if (!set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("LdrGetProcedureAddress", 4, hModule, (DWORD64)NULL, (DWORD64)LOWORD(funcName), (DWORD64)(void**)&proc)))
+    else if (!set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("LdrGetProcedureAddress", 4, hModule, (DWORD64)NULL, (DWORD64)LOWORD(funcName), PTR_TO_DWORD64((void**)&proc))))
         return NULL;
 
     return proc;
@@ -66,7 +84,7 @@ static SIZE_T VirtualQueryEx64(HANDLE hProcess, DWORD64 lpAddress, MEMORY_BASIC_
 {
     DWORD64 ret;
 
-    if (!set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtQueryVirtualMemory", 6, (DWORD64)hProcess, lpAddress, (DWORD64)MemoryBasicInformation, (DWORD64)lpBuffer, (DWORD64)dwLength, (DWORD64)&ret)))
+    if (!set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtQueryVirtualMemory", 6, HANDLE_TO_DWORD64(hProcess), lpAddress, (DWORD64)MemoryBasicInformation, PTR_TO_DWORD64(lpBuffer), (DWORD64)dwLength, PTR_TO_DWORD64(&ret))))
         return 0;
     return (SIZE_T)ret;
 }
@@ -76,7 +94,7 @@ static DWORD64 VirtualAllocEx64(HANDLE hProcess, DWORD64 lpAddress, SIZE_T dwSiz
     DWORD64 size = dwSize;
     PVOID64 ret = (PVOID64)lpAddress;
 
-    if (!set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtAllocateVirtualMemory", 6, (DWORD64)hProcess, (DWORD64)&ret, (DWORD64)0, (DWORD64)&size, (DWORD64)flAllocationType, (DWORD64)flProtect))) return NULL;
+    if (!set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtAllocateVirtualMemory", 6, HANDLE_TO_DWORD64(hProcess), PTR_TO_DWORD64(&ret), (DWORD64)0, PTR_TO_DWORD64(&size), (DWORD64)flAllocationType, (DWORD64)flProtect))) return NULL;
     return (DWORD64)ret;
 }
 
@@ -90,14 +108,14 @@ static BOOL VirtualFreeEx64(HANDLE hProcess, DWORD64 lpAddress, SIZE_T dwSize, D
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
-    return set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtFreeVirtualMemory", 4, (DWORD64)hProcess, (DWORD64)&lpAddress, (DWORD64)&size, (DWORD64)dwFreeType));
+    return set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtFreeVirtualMemory", 4, HANDLE_TO_DWORD64(hProcess), PTR_TO_DWORD64(&lpAddress), PTR_TO_DWORD64(&size), (DWORD64)dwFreeType));
 }
 
 static BOOL VirtualProtectEx64(HANDLE hProcess, DWORD64 lpAddress, SIZE_T dwSize, DWORD flNewProtect, DWORD* lpflOldProtect)
 {
     DWORD64 size = dwSize;
 
-    return set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtProtectVirtualMemory", 5, (DWORD64)hProcess, (DWORD64)&lpAddress, (DWORD64)&size, (DWORD64)flNewProtect, (DWORD64)lpflOldProtect));
+    return set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtProtectVirtualMemory", 5, HANDLE_TO_DWORD64(hProcess), PTR_TO_DWORD64(&lpAddress), PTR_TO_DWORD64(&size), (DWORD64)flNewProtect, PTR_TO_DWORD64(lpflOldProtect)));
 }
 
 #ifndef _WIN64
@@ -236,12 +254,12 @@ struct _CONTEXT64;// AMD64_CONTEXT or ARM64_NT_CONTEXT or new 64bit native arch 
 
 static BOOL GetThreadContext64(HANDLE hThread, _CONTEXT64* lpContext)
 {
-    return set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtGetContextThread", 2, (DWORD64)hThread, (DWORD64)lpContext));
+    return set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtGetContextThread", 2, HANDLE_TO_DWORD64(hThread), PTR_TO_DWORD64(lpContext)));
 }
 
 static BOOL SetThreadContext64(HANDLE hThread, const _CONTEXT64* lpContext)
 {
-    return set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtSetContextThread", 2, (DWORD64)hThread, (DWORD64)lpContext));
+    return set_ntstatus((NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtSetContextThread", 2, HANDLE_TO_DWORD64(hThread), PTR_TO_DWORD64(lpContext)));
 }
 
 // Code modification from reactos
@@ -266,11 +284,11 @@ static BOOL ReadProcessMemory64(HANDLE hProcess, DWORD64 lpBaseAddress, LPVOID l
     NTSTATUS Status;
 
     /* Do the read */
-    Status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtReadVirtualMemory", 5, (DWORD64)hProcess,
+    Status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtReadVirtualMemory", 5, HANDLE_TO_DWORD64(hProcess),
         lpBaseAddress,
-        (DWORD64)lpBuffer,
+        PTR_TO_DWORD64(lpBuffer),
         nSize,
-        (DWORD64)&nSize);
+        PTR_TO_DWORD64(&nSize));
 
     /* In user-mode, this parameter is optional */
     if (lpNumberOfBytesRead) *lpNumberOfBytesRead = (SIZE_T)nSize;
@@ -301,11 +319,11 @@ static BOOL WriteProcessMemory64(HANDLE hProcess, DWORD64 lpBaseAddress, LPCVOID
     Base = (PVOID64)lpBaseAddress;
 
     /* Check the current status */
-    Status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtProtectVirtualMemory", 5, (DWORD64)hProcess,
-        (DWORD64)&Base,
-        (DWORD64)&RegionSize,
+    Status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtProtectVirtualMemory", 5, HANDLE_TO_DWORD64(hProcess),
+        PTR_TO_DWORD64(&Base),
+        PTR_TO_DWORD64(&RegionSize),
         (DWORD64)PAGE_EXECUTE_READWRITE,
-        (DWORD64)&OldValue);
+        PTR_TO_DWORD64(&OldValue));
     if (NT_SUCCESS(Status))
     {
         /* Check if we are unprotecting */
@@ -316,18 +334,18 @@ static BOOL WriteProcessMemory64(HANDLE hProcess, DWORD64 lpBaseAddress, LPCVOID
         if (!UnProtect)
         {
             /* Set the new protection */
-            Status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtProtectVirtualMemory", 5, (DWORD64)hProcess,
-                (DWORD64)&Base,
-                (DWORD64)&RegionSize,
+            Status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtProtectVirtualMemory", 5, HANDLE_TO_DWORD64(hProcess),
+                PTR_TO_DWORD64(&Base),
+                PTR_TO_DWORD64(&RegionSize),
                 (DWORD64)OldValue,
-                (DWORD64)&OldValue);
+                PTR_TO_DWORD64(&OldValue));
 
             /* Write the memory */
-            Status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtWriteVirtualMemory", 5, (DWORD64)hProcess,
+            Status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtWriteVirtualMemory", 5, HANDLE_TO_DWORD64(hProcess),
                 lpBaseAddress,
-                (DWORD64)(LPVOID)lpBuffer,
+                PTR_TO_DWORD64((LPVOID)lpBuffer),
                 nSize,
-                (DWORD64)&nSize);
+                PTR_TO_DWORD64(&nSize));
 
             /* In Win32, the parameter is optional, so handle this case */
             if (lpNumberOfBytesWritten) *lpNumberOfBytesWritten = (SIZE_T)nSize;
@@ -340,7 +358,7 @@ static BOOL WriteProcessMemory64(HANDLE hProcess, DWORD64 lpBaseAddress, LPCVOID
             }
 
             /* Flush the ITLB */
-            Wow64Ext_CallNative64BitNtDllFunctionByName("NtFlushInstructionCache", 3, (DWORD64)hProcess, lpBaseAddress, nSize);
+            Wow64Ext_CallNative64BitNtDllFunctionByName("NtFlushInstructionCache", 3, HANDLE_TO_DWORD64(hProcess), lpBaseAddress, nSize);
             return TRUE;
         }
         else
@@ -349,11 +367,11 @@ static BOOL WriteProcessMemory64(HANDLE hProcess, DWORD64 lpBaseAddress, LPCVOID
             if (OldValue & (PAGE_NOACCESS | PAGE_READONLY))
             {
                 /* Restore protection and fail */
-                Wow64Ext_CallNative64BitNtDllFunctionByName("NtProtectVirtualMemory", 5, (DWORD64)hProcess,
-                    (DWORD64)&Base,
-                    (DWORD64)&RegionSize,
+                Wow64Ext_CallNative64BitNtDllFunctionByName("NtProtectVirtualMemory", 5, HANDLE_TO_DWORD64(hProcess),
+                    PTR_TO_DWORD64(&Base),
+                    PTR_TO_DWORD64(&RegionSize),
                     (DWORD64)OldValue,
-                    (DWORD64)&OldValue);
+                    PTR_TO_DWORD64(&OldValue));
                 BaseSetLastNTError(STATUS_ACCESS_VIOLATION);
 
                 /* Note: This is what Windows returns and code depends on it */
@@ -361,21 +379,21 @@ static BOOL WriteProcessMemory64(HANDLE hProcess, DWORD64 lpBaseAddress, LPCVOID
             }
 
             /* Otherwise, do the write */
-            Status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtWriteVirtualMemory", 5, (DWORD64)hProcess,
+            Status = (NTSTATUS)Wow64Ext_CallNative64BitNtDllFunctionByName("NtWriteVirtualMemory", 5, HANDLE_TO_DWORD64(hProcess),
                 lpBaseAddress,
-                (DWORD64)(LPVOID)lpBuffer,
+                PTR_TO_DWORD64((LPVOID)lpBuffer),
                 nSize,
-                (DWORD64)&nSize);
+                PTR_TO_DWORD64(&nSize));
 
             /* In Win32, the parameter is optional, so handle this case */
             if (lpNumberOfBytesWritten) *lpNumberOfBytesWritten = (SIZE_T)nSize;
 
             /* And restore the protection */
-            Wow64Ext_CallNative64BitNtDllFunctionByName("NtProtectVirtualMemory", 5, (DWORD64)hProcess,
-                (DWORD64)&Base,
-                (DWORD64)&RegionSize,
+            Wow64Ext_CallNative64BitNtDllFunctionByName("NtProtectVirtualMemory", 5, HANDLE_TO_DWORD64(hProcess),
+                PTR_TO_DWORD64(&Base),
+                PTR_TO_DWORD64(&RegionSize),
                 (DWORD64)OldValue,
-                (DWORD64)&OldValue);
+                PTR_TO_DWORD64(&OldValue));
             if (!NT_SUCCESS(Status))
             {
                 /* We failed */
@@ -386,7 +404,7 @@ static BOOL WriteProcessMemory64(HANDLE hProcess, DWORD64 lpBaseAddress, LPCVOID
             }
 
             /* Flush the ITLB */
-            Wow64Ext_CallNative64BitNtDllFunctionByName("NtFlushInstructionCache", 3, (DWORD64)hProcess, lpBaseAddress, nSize);
+            Wow64Ext_CallNative64BitNtDllFunctionByName("NtFlushInstructionCache", 3, HANDLE_TO_DWORD64(hProcess), lpBaseAddress, nSize);
             return TRUE;
         }
     }

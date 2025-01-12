@@ -646,14 +646,14 @@ DWORD64 GetProcAddressByImageExportDirectoryT(HANDLE hProcess, DWORD64 hModule, 
                 }
                 else if (sizeof(IMAGE_NT_HEADERS_T) == sizeof(IMAGE_NT_HEADERS32))
                 {
-                    h = (DWORD64)GetProcessModuleHandle_NoLock(hProcess, CA2W(pTempDll));
+                    h = HANDLE_TO_DWORD64(GetProcessModuleHandle_NoLock(hProcess, CA2W(pTempDll)));
                 }
 
                 if (h == NULL)
                 {
                     if (GetProcessId(hProcess) == GetCurrentProcessId())
                     {
-                        h = (DWORD64)LoadLibraryA(pTempDll);
+                        h = HANDLE_TO_DWORD64(LoadLibraryA(pTempDll));
                     }
                     else
                     {
