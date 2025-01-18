@@ -221,11 +221,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
     // Find current function address
     for (; pNameThunk->u1.Function; pNameThunk++, pFunctionAddressThunk++)
     {
-        if (IMAGE_ORDINAL_FLAG64 == (pNameThunk->u1.Ordinal & IMAGE_ORDINAL_FLAG64))
-        {
-            continue;
-        }
-        else
+        if (!IMAGE_SNAP_BY_ORDINAL64(pNameThunk->u1.Ordinal))
         {
             // Is this the function we're looking for?
             IMAGE_IMPORT_BY_NAME* pImportByName = (IMAGE_IMPORT_BY_NAME*)((PBYTE)hDstMod + pNameThunk->u1.AddressOfData);
