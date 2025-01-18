@@ -221,7 +221,7 @@ static int Wow64Ext_DoWork(BOOL bToStart)
     // Find current function address
     for (; pNameThunk->u1.Function; pNameThunk++, pFunctionAddressThunk++)
     {
-        if (IMAGE_ORDINAL_FLAG == (pNameThunk->u1.Ordinal & IMAGE_ORDINAL_FLAG))
+        if (IMAGE_ORDINAL_FLAG64 == (pNameThunk->u1.Ordinal & IMAGE_ORDINAL_FLAG64))
         {
             continue;
         }

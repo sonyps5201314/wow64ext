@@ -11,7 +11,7 @@ __declspec(dllexport) NTSTATUS WINAPI Wow64SystemServiceEx_M(UINT num, UINT* arg
     //check communication password
     if (num == HeavensGateNum)
     {
-#pragma pack(4)
+#pragma pack(push, 4)
         struct NtWow64ReadVirtualMemory64_Params
         {
             UINT ProcessHandle;
@@ -20,7 +20,7 @@ __declspec(dllexport) NTSTATUS WINAPI Wow64SystemServiceEx_M(UINT num, UINT* arg
             UINT64 NumberOfBytesToRead;
             UINT NumberOfBytesReaded;
         };
-#pragma pack()
+#pragma pack(pop)
 
         NtWow64ReadVirtualMemory64_Params* pParams = (NtWow64ReadVirtualMemory64_Params*)args;
         if (pParams->ProcessHandle == (UINT)(UINT_PTR)NtCurrentProcess() && pParams->BaseAddress == (UINT64)0x975787875797CAB1 &&
