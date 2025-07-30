@@ -3,7 +3,7 @@
 #include "import.h"
 
 // Wow64Ext APIs
-static int Wow64Ext_DoWork(BOOL bToStart)
+static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
 {
     BOOL Wow64Process = FALSE;
     IsWow64Process(GetCurrentProcess(), &Wow64Process);
@@ -264,6 +264,50 @@ static int Wow64Ext_DoWork(BOOL bToStart)
     }
 
     return 0;
+}
+
+static int Wow64Ext_DoWork(BOOL bToStart)
+{
+    if (bToStart)
+    {
+        long result_refcount = InterlockedIncrement(&Wow64Ext_RefCount);
+        if (result_refcount != 1) // Only the caller that causes the first reference to occur can execute the startup operation
+        {
+            // Wait for other threads to complete the startup of Wow64Ext
+            while (Wow64Ext_IsWorking == -1)
+            {
+                Sleep(10);
+            }
+            return 0xFF;
+        }
+        Wow64Ext_IsWorking = -1;
+    }
+    else
+    {
+        ATLASSERT(Wow64Ext_IsWorking == TRUE);
+        if (Wow64Ext_IsWorking != TRUE)
+        {
+            return 0xFFFF;
+        }
+        long result_refcount = InterlockedDecrement(&Wow64Ext_RefCount);
+        if (result_refcount != 0) // The stop operation can only be performed when the last reference is released
+        {
+            return 0xFF;
+        }
+    }
+
+    int result = Wow64Ext_DoWork_Unsafe(bToStart);
+    if (result == 0)
+    {
+        Wow64Ext_IsWorking = bToStart ? TRUE : FALSE;
+    }
+    else
+    {
+        long result_refcount = bToStart ? InterlockedDecrement(&Wow64Ext_RefCount) : InterlockedIncrement(&Wow64Ext_RefCount);
+        long i = result_refcount;
+        UNREFERENCED_PARAMETER(i);
+    }
+    return result;
 }
 
 static DWORD64 Wow64Ext_GetNative64BitNtDllProcAddress(LPCSTR name)

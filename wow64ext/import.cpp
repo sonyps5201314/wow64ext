@@ -14,3 +14,6 @@ __if_exists(ApiSetSchema)
 {
     ApiSetSchema* pApiSetSchema;
 }
+
+BOOL Wow64Ext_IsWorking;
+long Wow64Ext_RefCount;

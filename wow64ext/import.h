@@ -745,3 +745,6 @@ extern HANDLE cur_process;
 extern HMODULE hmod_wow64ext_only_mapped;
 extern DWORD64 hmod_ntdll64;
 extern HMODULE hmod_ntdll64_only_mapped;
+
+extern BOOL Wow64Ext_IsWorking;
+extern long Wow64Ext_RefCount;
