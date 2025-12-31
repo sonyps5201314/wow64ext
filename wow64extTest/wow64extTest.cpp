@@ -40,7 +40,9 @@ int main()
     HMODULE hmod1 = GetProcessModuleHandle_WithLock(hProcess, _T("api-ms-win-core-com-l1-1-0.dll"));
     FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs();
     HMODULE hmod2 = GetProcessModuleHandle_NoLock(hProcess, _T("api-ms-win-core-com-l1-1-0.dll"));
-    ATLASSERT(hmod1 == hmod2);
+    ATLASSERT(hmod2 == hmod1);
+    HMODULE hmod3 = GetProcessModuleHandle32_NoLock(hProcess, _T("api-ms-win-core-com-l1-1-0.dll"));
+    ATLASSERT(hmod3 == hmod1);
     delete pApiSetSchema;
     pApiSetSchema = NULL;
 #endif
