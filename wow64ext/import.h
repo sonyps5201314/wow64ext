@@ -325,19 +325,6 @@ DWORD_T FindProcessModuleT_NoLock(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL
         return NULL;
     }
 
-    NtQueryInformationProcess_T pfnNtQueryInformationProcess;
-    NtReadVirtualMemoryXX_T pfnNtReadVirtualMemory;
-    if (for64)
-    {
-        pfnNtQueryInformationProcess = _NtWow64QueryInformationProcess64 ? _NtWow64QueryInformationProcess64 : _NtQueryInformationProcess;
-        pfnNtReadVirtualMemory = (NtReadVirtualMemoryXX_T)NtReadVirtualMemory64;
-    }
-    else
-    {
-        pfnNtQueryInformationProcess = _NtQueryInformationProcess;
-        pfnNtReadVirtualMemory = (NtReadVirtualMemoryXX_T)_NtReadVirtualMemory;
-    }
-
     BOOL bFindByName = lpModuleName != NULL;
     BOOL bCompareFullPath = FALSE;
     if (bFindByName)
@@ -360,6 +347,19 @@ DWORD_T FindProcessModuleT_NoLock(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL
                 }
             }
         }
+    }
+
+    NtQueryInformationProcess_T pfnNtQueryInformationProcess;
+    NtReadVirtualMemoryXX_T pfnNtReadVirtualMemory;
+    if (for64)
+    {
+        pfnNtQueryInformationProcess = _NtWow64QueryInformationProcess64 ? _NtWow64QueryInformationProcess64 : _NtQueryInformationProcess;
+        pfnNtReadVirtualMemory = (NtReadVirtualMemoryXX_T)NtReadVirtualMemory64;
+    }
+    else
+    {
+        pfnNtQueryInformationProcess = _NtQueryInformationProcess;
+        pfnNtReadVirtualMemory = (NtReadVirtualMemoryXX_T)_NtReadVirtualMemory;
     }
 
     PROCESS_BASIC_INFORMATION_T pbi;
