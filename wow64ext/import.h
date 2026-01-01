@@ -39,16 +39,19 @@ typedef struct _PEB_LDR_DATA64
     LIST_ENTRY64 InInitializationOrderModuleList;
     PVOID64 EntryInProgress;
 } PEB_LDR_DATA64, * PPEB_LDR_DATA64;
-typedef struct _PEB_LDR_DATA32
+__if_not_exists(_PEB_LDR_DATA32)
 {
-    ULONG Length;
-    BOOLEAN Initialized;
-    WOW64_POINTER(HANDLE) SsHandle;
-    LIST_ENTRY32 InLoadOrderModuleList; 			  // Points to the loaded modules (main EXE usually)
-    LIST_ENTRY32 InMemoryOrderModuleList;   		  // Points to all modules (EXE and all DLLs)
-    LIST_ENTRY32 InInitializationOrderModuleList;
-    WOW64_POINTER(PVOID) EntryInProgress;
-} PEB_LDR_DATA32, * PPEB_LDR_DATA32;
+    typedef struct _PEB_LDR_DATA32
+    {
+        ULONG Length;
+        BOOLEAN Initialized;
+        WOW64_POINTER(HANDLE) SsHandle;
+        LIST_ENTRY32 InLoadOrderModuleList; 			  // Points to the loaded modules (main EXE usually)
+        LIST_ENTRY32 InMemoryOrderModuleList;   		  // Points to all modules (EXE and all DLLs)
+        LIST_ENTRY32 InInitializationOrderModuleList;
+        WOW64_POINTER(PVOID) EntryInProgress;
+    } PEB_LDR_DATA32, * PPEB_LDR_DATA32;
+}
 
 struct LDR_DATA_TABLE_ENTRY64
 {
@@ -65,21 +68,24 @@ struct LDR_DATA_TABLE_ENTRY64
     USHORT TlsIndex;
     LIST_ENTRY64 HashTableEntry;
 };
-struct LDR_DATA_TABLE_ENTRY32
+__if_not_exists(LDR_DATA_TABLE_ENTRY32)
 {
-    LIST_ENTRY32 InLoadOrderLinks;
-    LIST_ENTRY32 InMemoryOrderLinks;
-    LIST_ENTRY32 InInitializationOrderLinks;
-    WOW64_POINTER(PVOID) DllBase;
-    WOW64_POINTER(PVOID) DllEntryPoint;
-    ULONG SizeOfImage;
-    UNICODE_STRING32 FullDllName;
-    UNICODE_STRING32 BaseDllName;
-    ULONG Flags;
-    USHORT LoadCount;
-    USHORT TlsIndex;
-    LIST_ENTRY32 HashTableEntry;
-};
+    struct LDR_DATA_TABLE_ENTRY32
+    {
+        LIST_ENTRY32 InLoadOrderLinks;
+        LIST_ENTRY32 InMemoryOrderLinks;
+        LIST_ENTRY32 InInitializationOrderLinks;
+        WOW64_POINTER(PVOID) DllBase;
+        WOW64_POINTER(PVOID) DllEntryPoint;
+        ULONG SizeOfImage;
+        UNICODE_STRING32 FullDllName;
+        UNICODE_STRING32 BaseDllName;
+        ULONG Flags;
+        USHORT LoadCount;
+        USHORT TlsIndex;
+        LIST_ENTRY32 HashTableEntry;
+    };
+}
 
 typedef struct _PEB64
 {
@@ -93,18 +99,21 @@ typedef struct _PEB64
     PVOID64 Ldr;
     PVOID64 ProcessParameters;
 } PEB64, * PPEB64;
-typedef struct _PEB32
+__if_not_exists(_PEB32)
 {
-    BOOLEAN InheritedAddressSpace;  	// These four fields cannot change unless the
-    BOOLEAN ReadImageFileExecOptions;   //
-    BOOLEAN BeingDebugged;  			//
-    BOOLEAN SpareBool;  				//
-    WOW64_POINTER(HANDLE) Mutant; 		// INITIAL_PEB structure is also updated.
+    typedef struct _PEB32
+    {
+        BOOLEAN InheritedAddressSpace;  	// These four fields cannot change unless the
+        BOOLEAN ReadImageFileExecOptions;   //
+        BOOLEAN BeingDebugged;  			//
+        BOOLEAN SpareBool;  				//
+        WOW64_POINTER(HANDLE) Mutant; 		// INITIAL_PEB structure is also updated.
 
-    WOW64_POINTER(PVOID) ImageBaseAddress;
-    WOW64_POINTER(PPEB_LDR_DATA) Ldr;
-    WOW64_POINTER(PRTL_USER_PROCESS_PARAMETERS) ProcessParameters;
-} PEB32, * PPEB32;
+        WOW64_POINTER(PVOID) ImageBaseAddress;
+        WOW64_POINTER(PPEB_LDR_DATA) Ldr;
+        WOW64_POINTER(PRTL_USER_PROCESS_PARAMETERS) ProcessParameters;
+    } PEB32, * PPEB32;
+}
 
 
 // end_ntddk end_ntifs 
@@ -116,14 +125,17 @@ typedef struct _PROCESS_BASIC_INFORMATION64
     PVOID64 UniqueProcessId;
     PVOID64 Reserved3;
 } PROCESS_BASIC_INFORMATION64, * PPROCESS_BASIC_INFORMATION64;
-typedef struct _PROCESS_BASIC_INFORMATION32
+__if_not_exists(_PROCESS_BASIC_INFORMATION32)
 {
-    WOW64_POINTER(PVOID) Reserved1;
-    WOW64_POINTER(PPEB) PebBaseAddress;
-    WOW64_POINTER(PVOID) Reserved2[2];
-    WOW64_POINTER(ULONG_PTR) UniqueProcessId;
-    WOW64_POINTER(PVOID) Reserved3;
-} PROCESS_BASIC_INFORMATION32, * PPROCESS_BASIC_INFORMATION32;
+    typedef struct _PROCESS_BASIC_INFORMATION32
+    {
+        WOW64_POINTER(PVOID) Reserved1;
+        WOW64_POINTER(PPEB) PebBaseAddress;
+        WOW64_POINTER(PVOID) Reserved2[2];
+        WOW64_POINTER(ULONG_PTR) UniqueProcessId;
+        WOW64_POINTER(PVOID) Reserved3;
+    } PROCESS_BASIC_INFORMATION32, * PPROCESS_BASIC_INFORMATION32;
+}
 
 __if_exists(ApiSetSchema)
 {
