@@ -341,8 +341,13 @@ static BOOL FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs()
             _NtReadVirtualMemory = (NTSTATUS(NTAPI*)(HANDLE, PVOID, PVOID, SIZE_T, PSIZE_T))
                 GetProcAddress(hmod_ntdll, "NtReadVirtualMemory");
 
-            BOOL Wow64Process = FALSE;
-            IsWow64Process(GetCurrentProcess(), &Wow64Process);
+            BOOL Wow64Process;
+            if (!IsWow64Process(GetCurrentProcess(), &Wow64Process))
+            {
+                ATLASSERT(FALSE);
+                return FALSE;
+            }
+
             if (Wow64Process)
             {
                 _NtWow64QueryInformationProcess64 = (NTSTATUS(NTAPI*)(HANDLE, PROCESSINFOCLASS, PVOID, ULONG, PULONG))
@@ -418,8 +423,13 @@ DWORD_T FindProcessModuleT_NoLock(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL
         lpModuleFullPath[0] = 0;
     }
 
-    BOOL Wow64Process = FALSE;
-    IsWow64Process(hProcess, &Wow64Process);
+    BOOL Wow64Process;
+    if (!IsWow64Process(hProcess, &Wow64Process))
+    {
+        ATLASSERT(FALSE);
+        return NULL;
+    }
+
     if (Wow64Process && !for64)
     {
         ULONG_PTR wow64 = 0;
@@ -546,13 +556,72 @@ static DWORD GetProcessModuleFileName32_NoLock(HANDLE hProcess, HMODULE hModule,
     return (DWORD)FindProcessModuleT_NoLock<PVOID, DWORD_PTR, SIZE_T, PROCESS_BASIC_INFORMATION32, PEB32, PEB_LDR_DATA32, LDR_DATA_TABLE_ENTRY32, NtReadVirtualMemory_T, FALSE>(hProcess, NULL, hModule, lpFilename, nSize);
 }
 
+// Like EnumProcessModules
 static HMODULE GetProcessModuleHandle_NoLock(HANDLE hProcess, LPCWSTR lpModuleName)
 {
     return (HMODULE)FindProcessModuleT_NoLock<PVOID, DWORD_PTR, SIZE_T, PROCESS_BASIC_INFORMATION, PEB, PEB_LDR_DATA, LDR_DATA_TABLE_ENTRY, NtReadVirtualMemory_T, FALSE>(hProcess, lpModuleName, NULL, NULL, 0);
 }
+// Like GetModuleFileNameEx
 static DWORD GetProcessModuleFileName_NoLock(HANDLE hProcess, HMODULE hModule, LPWSTR lpFilename, DWORD nSize)
 {
     return (DWORD)FindProcessModuleT_NoLock<PVOID, DWORD_PTR, SIZE_T, PROCESS_BASIC_INFORMATION, PEB, PEB_LDR_DATA, LDR_DATA_TABLE_ENTRY, NtReadVirtualMemory_T, FALSE>(hProcess, NULL, hModule, lpFilename, nSize);
+}
+
+// Like EnumProcessModulesEx, but it ignores whether the process itself or the target is a 32-bit or 64-bit process.
+static DWORD64 GetProcessModuleHandleAuto_NoLock(HANDLE hProcess, LPCWSTR lpModuleName)
+{
+    BOOL SelfIsWow64Process;
+    BOOL DstIsWow64Process;
+    if (!IsWow64Process(GetCurrentProcess(), &SelfIsWow64Process) || !IsWow64Process(hProcess, &DstIsWow64Process))
+    {
+        ATLASSERT(FALSE);
+        return NULL;
+    }
+
+    if (SelfIsWow64Process == DstIsWow64Process)
+    {
+        // 1. Case on a 32-bit system
+        // 2. On a 64-bit system when both this process and the target process are either both 32-bit or both 64-bit
+        return HANDLE_TO_DWORD64(GetProcessModuleHandle_NoLock(hProcess, lpModuleName));
+    }
+    // 3. On a 64-bit system where this process is 64-bit and the target process is 32-bit
+    else if (DstIsWow64Process)
+    {
+        return HANDLE_TO_DWORD64(GetProcessModuleHandle32_NoLock(hProcess, lpModuleName));
+    }
+    // 4. On a 64-bit system where this process is 32-bit and the target process is 64-bit
+    else
+    {
+        return GetProcessModuleHandle64_NoLock(hProcess, lpModuleName);
+    }
+}
+// Like GetModuleFileNameEx, but it ignores whether the process itself or the target is a 32-bit or 64-bit process.
+static DWORD GetProcessModuleFileNameAuto_NoLock(HANDLE hProcess, PVOID64 hModule, LPWSTR lpFilename, DWORD nSize)
+{
+    BOOL SelfIsWow64Process;
+    BOOL DstIsWow64Process;
+    if (!IsWow64Process(GetCurrentProcess(), &SelfIsWow64Process) || !IsWow64Process(hProcess, &DstIsWow64Process))
+    {
+        ATLASSERT(FALSE);
+        return 0;
+    }
+
+    if (SelfIsWow64Process == DstIsWow64Process)
+    {
+        // 1. Case on a 32-bit system
+        // 2. On a 64-bit system when both this process and the target process are either both 32-bit or both 64-bit
+        return GetProcessModuleFileName_NoLock(hProcess, (HMODULE)Ptr64ToPtr(hModule), lpFilename, nSize);
+    }
+    // 3. On a 64-bit system where this process is 64-bit and the target process is 32-bit
+    else if (DstIsWow64Process)
+    {
+        return GetProcessModuleFileName32_NoLock(hProcess, (HMODULE)Ptr64ToPtr(hModule), lpFilename, nSize);
+    }
+    // 4. On a 64-bit system where this process is 32-bit and the target process is 64-bit
+    else
+    {
+        return (DWORD)GetProcessModuleFileName64_NoLock(hProcess, hModule, lpFilename, nSize);
+    }
 }
 
 //After calling FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs, there is no need to call GetProcAddressByImageExportDirectoryT__CheckForPrepareFunctionPtrs,
@@ -564,8 +633,13 @@ static BOOL GetProcAddressByImageExportDirectoryT__CheckForPrepareFunctionPtrs()
         HMODULE hmod_ntdll = GetModuleHandle(_T("ntdll.dll"));
         if (hmod_ntdll)
         {
-            BOOL Wow64Process = FALSE;
-            IsWow64Process(GetCurrentProcess(), &Wow64Process);
+            BOOL Wow64Process;
+            if (!IsWow64Process(GetCurrentProcess(), &Wow64Process))
+            {
+                ATLASSERT(FALSE);
+                return FALSE;
+            }
+
             if (Wow64Process)
             {
                 _NtWow64ReadVirtualMemory64 = (NTSTATUS(NTAPI*)(HANDLE, PVOID64, PVOID, UINT64, PUINT64))
@@ -581,6 +655,7 @@ static BOOL GetProcAddressByImageExportDirectoryT__CheckForPrepareFunctionPtrs()
 
     return _NtWow64ReadVirtualMemory64 || _NtReadVirtualMemory;
 }
+// Get the address of an exported function from the target process module's export directory
 template<typename IMAGE_NT_HEADERS_T>
 DWORD64 GetProcAddressByImageExportDirectoryT(HANDLE hProcess, DWORD64 hModule, LPCSTR lpProcName)
 {
@@ -746,6 +821,36 @@ __clean__:
 #undef READ_MEM
     return pRet;
 }
+
+// Like GetProcAddress, but it ignores whether the process itself or the target is a 32-bit or 64-bit process.
+static DWORD64 GetProcAddressByImageExportDirectoryAuto(HANDLE hProcess, DWORD64 hModule, LPCSTR lpProcName)
+{
+    BOOL SelfIsWow64Process;
+    BOOL DstIsWow64Process;
+    if (!IsWow64Process(GetCurrentProcess(), &SelfIsWow64Process) || !IsWow64Process(hProcess, &DstIsWow64Process))
+    {
+        ATLASSERT(FALSE);
+        return 0;
+    }
+
+    if (SelfIsWow64Process == DstIsWow64Process)
+    {
+        // 1. Case on a 32-bit system
+        // 2. On a 64-bit system when both this process and the target process are either both 32-bit or both 64-bit
+        return GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS>(hProcess, hModule, lpProcName);
+    }
+    // 3. On a 64-bit system where this process is 64-bit and the target process is 32-bit
+    else if (DstIsWow64Process)
+    {
+        return GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS32>(hProcess, hModule, lpProcName);
+    }
+    // 4. On a 64-bit system where this process is 32-bit and the target process is 64-bit
+    else
+    {
+        return GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(hProcess, hModule, lpProcName);
+    }
+}
+
 
 static PVOID MapImage(LPCTSTR Path)
 {

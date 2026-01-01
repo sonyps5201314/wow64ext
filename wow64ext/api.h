@@ -5,24 +5,27 @@
 // Wow64Ext APIs
 static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
 {
-    BOOL Wow64Process = FALSE;
-    IsWow64Process(GetCurrentProcess(), &Wow64Process);
-    if (!Wow64Process)
+    BOOL Wow64Process;
+    if (!IsWow64Process(GetCurrentProcess(), &Wow64Process))
     {
         return -1;
+    }
+    if (!Wow64Process)
+    {
+        return -2;
     }
 
     HMODULE hmod_ntdll32 = GetModuleHandle(_T("ntdll.dll"));
     if (!hmod_ntdll32)
     {
-        return -2;
+        return -3;
     }
 
     NTSTATUS(NTAPI * _NtWow64GetNativeSystemInformation)(SYSTEM_INFORMATION_CLASS class0, void* info, ULONG len, ULONG * retlen)
         = (NTSTATUS(NTAPI*)(SYSTEM_INFORMATION_CLASS, void*, ULONG, ULONG*))GetProcAddress(hmod_ntdll32, "NtWow64GetNativeSystemInformation");
     if (!_NtWow64GetNativeSystemInformation)
     {
-        return -3;
+        return -4;
     }
 
     LPCWSTR pDstModName = NULL;
@@ -48,7 +51,7 @@ static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
     }
     break;
     default:
-        return -4;
+        return -5;
         break;
     }
 
@@ -57,7 +60,7 @@ static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
     LPCTSTR pszWow64ExtFileName = GetWow64ExtFileName(cpu.ProcessorArchitecture, szWow64ExtFileNameBuffer);
     if (pszWow64ExtFileName == NULL || pszWow64ExtFileName[0] == 0)
     {
-        return -5;
+        return -6;
     }
 
     if (bToStart)
@@ -65,13 +68,13 @@ static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
         ATLASSERT(hmod_wow64ext_only_mapped == NULL);
         if (hmod_wow64ext_only_mapped != NULL)
         {
-            return -6;
+            return -7;
         }
         hmod_wow64ext_only_mapped = (HMODULE)MapImage(pszWow64ExtFileName);
     }
     if (hmod_wow64ext_only_mapped == NULL)
     {
-        return -7;
+        return -8;
     }
 
     if (bToStart)
@@ -80,14 +83,14 @@ static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
     }
     if (cur_process == NULL)
     {
-        return -8;
+        return -9;
     }
 
     if (bToStart)
     {
         if (!FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs())
         {
-            return -9;
+            return -10;
         }
     }
 
@@ -104,7 +107,7 @@ static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
         HMODULE hmod_ntdll32_x86_only_mapped = (HMODULE)MapImage(szNtDll32Name_x86);
         if (hmod_ntdll32_x86_only_mapped == NULL)
         {
-            return -10;
+            return -11;
         }
         PBYTE pcbCode = (PBYTE)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS32>(cur_process, HANDLE_TO_DWORD64(hmod_ntdll32_x86_only_mapped), "NtWow64ReadVirtualMemory64");
         // B8 F5 01 00 00          mov     eax, 1F5h       ; NtWow64ReadVirtualMemory64
@@ -119,7 +122,7 @@ static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
     PVOID64* pWow64SystemServiceEx_O = (PVOID64*)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, HANDLE_TO_DWORD64(hmod_wow64ext_only_mapped), "Wow64SystemServiceEx_O");
     if (!bToStart && *pWow64SystemServiceEx_O == NULL)
     {
-        return -11;
+        return -12;
     }
     PVOID Wow64SystemServiceEx_M = (PVOID)GetProcAddressByImageExportDirectoryT<IMAGE_NT_HEADERS64>(cur_process, HANDLE_TO_DWORD64(hmod_wow64ext_only_mapped), "Wow64SystemServiceEx_M");
     PVOID pNewFunction = Wow64SystemServiceEx_M;
@@ -129,7 +132,7 @@ static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
         hmod_ntdll64 = (DWORD64)GetProcessModuleHandle64_NoLock(cur_process, L"ntdll.dll");
         if (hmod_ntdll64 == NULL)
         {
-            return -12;
+            return -13;
         }
     }
     else
@@ -143,7 +146,7 @@ static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
         ATLASSERT(hmod_ntdll64_only_mapped == NULL);
         if (hmod_ntdll64_only_mapped != NULL)
         {
-            return -13;
+            return -14;
         }
         PVOID OldValue;
         BOOL bRet = Wow64DisableWow64FsRedirection(&OldValue);
@@ -158,7 +161,7 @@ static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
         }
         if (hmod_ntdll64_only_mapped == NULL)
         {
-            return -14;
+            return -15;
         }
     }
     else
