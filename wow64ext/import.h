@@ -142,54 +142,20 @@ __if_exists(ApiSetSchema)
     extern ApiSetSchema* pApiSetSchema;
 }
 
-static DWORD_PTR FindProcessModule_WithLock(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL*/ OPTIONAL, HMODULE hModule /*= NULL*/ OPTIONAL, OUT LPWSTR lpModuleFullPath /*= NULL*/ OPTIONAL, DWORD nModuleFullPathLen /*= 0*/ OPTIONAL)
+typedef BOOL(CALLBACK* PENUM_PROCESS_MODULES_CALLBACK_WITH_LOCK)(HMODULE hModule, LPCWSTR lpFullDllName, LPARAM lParam);
+
+static BOOL EnumProcessModules_WithLock(HANDLE hProcess, PENUM_PROCESS_MODULES_CALLBACK_WITH_LOCK pCallback, LPARAM lParam)
 {
     ATLASSERT(hProcess);
-    ATLASSERT(lpModuleName || hModule);
-    if (!hProcess || (!lpModuleName && !hModule))
+    ATLASSERT(pCallback);
+    if (!hProcess || !pCallback)
     {
-        return NULL;
+        return FALSE;
     }
 
     DWORD dwProcessId = GetProcessId(hProcess);
-
-    DWORD_PTR dwResult = 0;
-
     HANDLE hModuleSnap = INVALID_HANDLE_VALUE;
-    MODULEENTRY32W me32 =
-    {
-        0
-    };
-
-    if (lpModuleFullPath && nModuleFullPathLen > 0)
-    {
-        lpModuleFullPath[0] = 0;
-    }
-
-
-    BOOL bFindByName = lpModuleName != NULL;
-    BOOL bCompareFullPath = FALSE;
-    if (bFindByName)
-    {
-        bCompareFullPath = !PathIsRelativeW(lpModuleName);
-
-        __if_exists(ApiSetSchema)
-        {
-            if (!bCompareFullPath)
-            {
-                if (pApiSetSchema)
-                {
-                    CString strOldDllTitleName = GetFileTitleName(lpModuleName);
-                    ApiSetTarget* pApiSetTarget = pApiSetSchema->Lookup(strOldDllTitleName);
-                    if (pApiSetTarget)
-                    {
-                        CString strNewDllName = pApiSetTarget->GetAt(0);
-                        return FindProcessModule_WithLock(hProcess, CT2W(strNewDllName), hModule, lpModuleFullPath, nModuleFullPathLen);
-                    }
-                }
-            }
-        }
-    }
+    MODULEENTRY32W me32 = { 0 };
 
     // Take a snapshot of all modules in the specified process.
     //https://github.com/baldurk/renderdoc/blob/7ef73f92ef19d3dfc325a52aba6912386433bec9/renderdoc/os/win32/win32_process.cpp
@@ -235,36 +201,9 @@ static DWORD_PTR FindProcessModule_WithLock(HANDLE hProcess, LPCWSTR lpModuleNam
     {
         do
         {
-            if (bFindByName)
+            if (!pCallback(me32.hModule, me32.szExePath, lParam))
             {
-                LPCWSTR pszName = bCompareFullPath ? me32.szExePath : me32.szModule;
-                if (!_wcsicmp(pszName, lpModuleName))
-                {
-                    DWORD len = 0;
-                    if (lpModuleFullPath && nModuleFullPathLen > 0)
-                    {
-                        len = (DWORD)__min(nModuleFullPathLen, wcslen(me32.szExePath));
-                        memcpy(lpModuleFullPath, me32.szExePath, len * sizeof(WCHAR));
-                        if (len < nModuleFullPathLen) lpModuleFullPath[len] = 0;
-                    }
-                    dwResult = (DWORD_PTR)me32.hModule;
-                    break;
-                }
-            }
-            else
-            {
-                if (me32.hModule == hModule)
-                {
-                    DWORD len = 0;
-                    if (lpModuleFullPath && nModuleFullPathLen > 0)
-                    {
-                        len = (DWORD)__min(nModuleFullPathLen, wcslen(me32.szExePath));
-                        memcpy(lpModuleFullPath, me32.szExePath, len * sizeof(WCHAR));
-                        if (len < nModuleFullPathLen) lpModuleFullPath[len] = 0;
-                    }
-                    dwResult = len;
-                    break;
-                }
+                break;
             }
         } while (Module32NextW(hModuleSnap, &me32));
     }
@@ -282,8 +221,107 @@ static DWORD_PTR FindProcessModule_WithLock(HANDLE hProcess, LPCWSTR lpModuleNam
         hModuleSnap = NULL;
     }
 
+    return TRUE;
+}
 
-    return dwResult;
+struct FindProcessModuleWithLockCallbackCtx
+{
+    BOOL bFindByName;
+    BOOL bCompareFullPath;
+    LPCWSTR lpModuleName;
+    HMODULE hModule;
+    LPWSTR lpModuleFullPath;
+    DWORD nModuleFullPathLen;
+    DWORD_PTR resultVal;
+};
+
+static BOOL CALLBACK FindProcessModuleWithLock_EnumCallback(HMODULE hModule, LPCWSTR lpFullDllName, LPARAM lParam)
+{
+    FindProcessModuleWithLockCallbackCtx* pCtx = (FindProcessModuleWithLockCallbackCtx*)lParam;
+    if (pCtx->bFindByName)
+    {
+        LPCWSTR pszName = pCtx->bCompareFullPath ? lpFullDllName : PathFindFileNameW(lpFullDllName);
+        if (!_wcsicmp(pszName, pCtx->lpModuleName))
+        {
+            DWORD len = 0;
+            if (pCtx->lpModuleFullPath && pCtx->nModuleFullPathLen > 0)
+            {
+                len = (DWORD)__min(pCtx->nModuleFullPathLen, wcslen(lpFullDllName));
+                memcpy(pCtx->lpModuleFullPath, lpFullDllName, len * sizeof(WCHAR));
+                if (len < pCtx->nModuleFullPathLen) pCtx->lpModuleFullPath[len] = 0;
+            }
+            pCtx->resultVal = (DWORD_PTR)hModule;
+            return FALSE;
+        }
+    }
+    else
+    {
+        if (hModule == pCtx->hModule)
+        {
+            DWORD len = 0;
+            if (pCtx->lpModuleFullPath && pCtx->nModuleFullPathLen > 0)
+            {
+                len = (DWORD)__min(pCtx->nModuleFullPathLen, wcslen(lpFullDllName));
+                memcpy(pCtx->lpModuleFullPath, lpFullDllName, len * sizeof(WCHAR));
+                if (len < pCtx->nModuleFullPathLen) pCtx->lpModuleFullPath[len] = 0;
+            }
+            pCtx->resultVal = len;
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+static DWORD_PTR FindProcessModule_WithLock(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL*/ OPTIONAL, HMODULE hModule /*= NULL*/ OPTIONAL, OUT LPWSTR lpModuleFullPath /*= NULL*/ OPTIONAL, DWORD nModuleFullPathLen /*= 0*/ OPTIONAL)
+{
+    ATLASSERT(hProcess);
+    ATLASSERT(lpModuleName || hModule);
+    if (!hProcess || (!lpModuleName && !hModule))
+    {
+        return NULL;
+    }
+
+    BOOL bFindByName = lpModuleName != NULL;
+    BOOL bCompareFullPath = FALSE;
+    if (bFindByName)
+    {
+        bCompareFullPath = !PathIsRelativeW(lpModuleName);
+
+        __if_exists(ApiSetSchema)
+        {
+            if (!bCompareFullPath)
+            {
+                if (pApiSetSchema)
+                {
+                    CString strOldDllTitleName = GetFileTitleName(lpModuleName);
+                    ApiSetTarget* pApiSetTarget = pApiSetSchema->Lookup(strOldDllTitleName);
+                    if (pApiSetTarget)
+                    {
+                        CString strNewDllName = pApiSetTarget->GetAt(0);
+                        return FindProcessModule_WithLock(hProcess, CT2W(strNewDllName), hModule, lpModuleFullPath, nModuleFullPathLen);
+                    }
+                }
+            }
+        }
+    }
+
+    if (lpModuleFullPath && nModuleFullPathLen > 0)
+    {
+        lpModuleFullPath[0] = 0;
+    }
+
+    FindProcessModuleWithLockCallbackCtx ctx;
+    ctx.bFindByName = bFindByName;
+    ctx.bCompareFullPath = bCompareFullPath;
+    ctx.lpModuleName = lpModuleName;
+    ctx.hModule = hModule;
+    ctx.lpModuleFullPath = lpModuleFullPath;
+    ctx.nModuleFullPathLen = nModuleFullPathLen;
+    ctx.resultVal = 0;
+
+    EnumProcessModules_WithLock(hProcess, FindProcessModuleWithLock_EnumCallback, (LPARAM)&ctx);
+
+    return ctx.resultVal;
 }
 
 static HMODULE GetProcessModuleHandle_WithLock(HANDLE hProcess, LPCWSTR lpModuleName)
@@ -341,7 +379,7 @@ static NTSTATUS NTAPI NtReadVirtualMemory64(IN HANDLE ProcessHandle, IN PVOID64 
 typedef NTSTATUS(NTAPI* NtQueryInformationProcess_T)(IN HANDLE ProcessHandle, IN PROCESSINFOCLASS ProcessInformationClass, OUT PVOID ProcessInformation, IN ULONG ProcessInformationLength, OUT PULONG ReturnLength OPTIONAL);
 typedef NTSTATUS(NTAPI* NtReadVirtualMemory64_T)(IN HANDLE ProcessHandle, IN PVOID64 BaseAddress, OUT PVOID Buffer, IN UINT64 NumberOfBytesToRead, OUT PUINT64 NumberOfBytesReaded);
 typedef NTSTATUS(NTAPI* NtReadVirtualMemory_T)(IN HANDLE ProcessHandle, IN PVOID BaseAddress, OUT PVOID Buffer, IN SIZE_T BufferSize, OUT PSIZE_T NumberOfBytesRead OPTIONAL);
-static BOOL FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs()
+static BOOL EnumProcessModulesT_NoLock__CheckForPrepareFunctionPtrs()
 {
     if ((_NtWow64QueryInformationProcess64 == NULL && _NtQueryInformationProcess == NULL) || (_NtWow64ReadVirtualMemory64 == NULL && _NtReadVirtualMemory == NULL))
     {
@@ -372,6 +410,176 @@ static BOOL FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs()
 
     return (_NtWow64QueryInformationProcess64 || _NtQueryInformationProcess) && (_NtWow64ReadVirtualMemory64 || _NtReadVirtualMemory);
 }
+typedef BOOL(CALLBACK* PENUM_PROCESS_MODULES_CALLBACK_NO_LOCK)(PVOID64 hModule, LPCWSTR lpFullDllName, LPARAM lParam);
+
+template<typename PVOID_T, typename DWORD_T, typename SIZE_T_T, typename PROCESS_BASIC_INFORMATION_T, typename PEB_T, typename PEB_LDR_DATA_T, typename LDR_DATA_TABLE_ENTRY_T, typename NtReadVirtualMemoryXX_T, BOOL for64>
+BOOL EnumProcessModulesT_NoLock(HANDLE hProcess, PENUM_PROCESS_MODULES_CALLBACK_NO_LOCK pCallback, LPARAM lParam)
+{
+    ATLASSERT(hProcess);
+    ATLASSERT(pCallback);
+    if (!hProcess || !pCallback)
+    {
+        return FALSE;
+    }
+
+    if ((_NtWow64QueryInformationProcess64 == NULL && _NtQueryInformationProcess == NULL) || (_NtWow64ReadVirtualMemory64 == NULL && _NtReadVirtualMemory == NULL))
+    {
+        ATLASSERT((_NtWow64QueryInformationProcess64 || _NtQueryInformationProcess) && (_NtWow64ReadVirtualMemory64 || _NtReadVirtualMemory));
+        return FALSE;
+    }
+
+    NtQueryInformationProcess_T pfnNtQueryInformationProcess;
+    NtReadVirtualMemoryXX_T pfnNtReadVirtualMemory;
+    if (for64)
+    {
+        pfnNtQueryInformationProcess = _NtWow64QueryInformationProcess64 ? _NtWow64QueryInformationProcess64 : _NtQueryInformationProcess;
+        pfnNtReadVirtualMemory = (NtReadVirtualMemoryXX_T)NtReadVirtualMemory64;
+    }
+    else
+    {
+        pfnNtQueryInformationProcess = _NtQueryInformationProcess;
+        pfnNtReadVirtualMemory = (NtReadVirtualMemoryXX_T)_NtReadVirtualMemory;
+    }
+
+    DWORD dwSize;
+    SIZE_T_T size;
+    NTSTATUS iReturn;
+    PVOID_T pAddrPEB = NULL;
+
+    BOOL Wow64Process;
+    if (!IsWow64Process(hProcess, &Wow64Process))
+    {
+        ATLASSERT(FALSE);
+        return FALSE;
+    }
+
+    if (Wow64Process && !for64)
+    {
+        ULONG_PTR wow64 = 0;
+        iReturn = pfnNtQueryInformationProcess(hProcess, ProcessWow64Information, &wow64, sizeof(wow64), &dwSize);
+        pAddrPEB = (PVOID_T)wow64;
+    }
+    else
+    {
+        PROCESS_BASIC_INFORMATION_T pbi;
+        iReturn = pfnNtQueryInformationProcess(hProcess, ProcessBasicInformation, &pbi, sizeof(pbi), &dwSize);
+        pAddrPEB = (PVOID_T)(DWORD_T)pbi.PebBaseAddress;
+    }
+
+    // NtQueryInformationProcess returns a negative value if it fails
+    if (iReturn >= 0)
+    {
+        // 1. Find the Process Environment Block
+        PEB_T PEB;
+        size = dwSize;
+        if (ERROR_SUCCESS != pfnNtReadVirtualMemory(hProcess, pAddrPEB, &PEB, sizeof(PEB), &size))
+        {
+            // Call GetLastError() if you need to know why
+            return FALSE;
+        }
+
+        SIZE_T_T dwBytesRead;
+        PEB_LDR_DATA_T Ldr;
+        if (ERROR_SUCCESS != pfnNtReadVirtualMemory(hProcess, (PVOID_T)(DWORD_T)PEB.Ldr, (LPVOID)&Ldr, sizeof(Ldr), &dwBytesRead))
+        {
+            ATLTRACE(_T("pfnNtReadVirtualMemory error %u\n"), GetLastError());
+            return FALSE;
+        }
+
+
+        LDR_DATA_TABLE_ENTRY_T module_info =
+        {
+            0
+        };
+        PVOID InLoadOrderModuleList_Offset = &((PEB_LDR_DATA_T*)NULL)->InLoadOrderModuleList;
+        PVOID_T pStartModuleInfo = (PVOID_T)((DWORD_T)PEB.Ldr + (DWORD_PTR)InLoadOrderModuleList_Offset);
+        PVOID_T pNextModuleInfo = (PVOID_T)(DWORD_T)Ldr.InLoadOrderModuleList.Flink;
+        WCHAR wFullDllName[MAX_PATH];
+
+        //Get info for each loaded DLL
+        do
+        {
+            //Get LDR_MODULE (LDR_DATA_TABLE_ENTRY) structure
+            iReturn = pfnNtReadVirtualMemory(hProcess, pNextModuleInfo, &module_info, sizeof(LDR_DATA_TABLE_ENTRY_T), &dwBytesRead);
+            if (ERROR_SUCCESS != iReturn)
+            {
+                ATLTRACE(_T("pfnNtReadVirtualMemory error %u\n"), iReturn);
+                return FALSE;
+            }
+
+            wFullDllName[0] = 0;
+            //Read string with Dll full name
+            iReturn = pfnNtReadVirtualMemory(hProcess, (PVOID_T)(DWORD_T)module_info.FullDllName.Buffer, (LPVOID)&wFullDllName, module_info.FullDllName.MaximumLength, &dwBytesRead);
+            if (ERROR_SUCCESS != iReturn)
+            {
+                ATLTRACE(_T("pfnNtReadVirtualMemory error %u\n"), iReturn);
+                return FALSE;
+            }
+            if (module_info.FullDllName.Length > 0 && module_info.FullDllName.Length / sizeof(WCHAR) < MAX_PATH)
+            {
+                wFullDllName[module_info.FullDllName.Length / sizeof(WCHAR)] = 0;
+            }
+
+            if (!pCallback((PVOID64)(DWORD_T)module_info.DllBase, wFullDllName, lParam))
+            {
+                break;
+            }
+
+            pNextModuleInfo = (PVOID_T)(DWORD_T)module_info.InLoadOrderLinks.Flink;
+        } while (pNextModuleInfo != pStartModuleInfo);
+    }
+
+    return TRUE;
+}
+
+struct FindProcessModuleCallbackCtx
+{
+    BOOL bFindByName;
+    BOOL bCompareFullPath;
+    LPCWSTR lpModuleName;
+    DWORD64 hModule;
+    LPWSTR lpModuleFullPath;
+    DWORD nModuleFullPathLen;
+    DWORD64 resultVal;
+};
+
+static BOOL CALLBACK FindProcessModule_EnumCallback(PVOID64 hModule, LPCWSTR lpFullDllName, LPARAM lParam)
+{
+    FindProcessModuleCallbackCtx* pCtx = (FindProcessModuleCallbackCtx*)lParam;
+    if (pCtx->bFindByName)
+    {
+        LPCWSTR pszName = pCtx->bCompareFullPath ? lpFullDllName : PathFindFileNameW(lpFullDllName);
+        if (!_wcsicmp(pszName, pCtx->lpModuleName))
+        {
+            DWORD len = 0;
+            if (pCtx->lpModuleFullPath && pCtx->nModuleFullPathLen > 0)
+            {
+                len = (DWORD)__min(pCtx->nModuleFullPathLen, wcslen(lpFullDllName));
+                memcpy(pCtx->lpModuleFullPath, lpFullDllName, len * sizeof(WCHAR));
+                if (len < pCtx->nModuleFullPathLen) pCtx->lpModuleFullPath[len] = 0;
+            }
+            pCtx->resultVal = (DWORD64)hModule;
+            return FALSE;
+        }
+    }
+    else
+    {
+        if (hModule == (PVOID64)pCtx->hModule)
+        {
+            DWORD len = 0;
+            if (pCtx->lpModuleFullPath && pCtx->nModuleFullPathLen > 0)
+            {
+                len = (DWORD)__min(pCtx->nModuleFullPathLen, wcslen(lpFullDllName));
+                memcpy(pCtx->lpModuleFullPath, lpFullDllName, len * sizeof(WCHAR));
+                if (len < pCtx->nModuleFullPathLen) pCtx->lpModuleFullPath[len] = 0;
+            }
+            pCtx->resultVal = len;
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
 template<typename PVOID_T, typename DWORD_T, typename SIZE_T_T, typename PROCESS_BASIC_INFORMATION_T, typename PEB_T, typename PEB_LDR_DATA_T, typename LDR_DATA_TABLE_ENTRY_T, typename NtReadVirtualMemoryXX_T, BOOL for64>
 DWORD_T FindProcessModuleT_NoLock(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL*/ OPTIONAL, PVOID_T hModule /*= NULL*/ OPTIONAL, OUT LPWSTR lpModuleFullPath /*= NULL*/ OPTIONAL, DWORD nModuleFullPathLen /*= 0*/ OPTIONAL)
 {
@@ -379,12 +587,6 @@ DWORD_T FindProcessModuleT_NoLock(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL
     ATLASSERT(lpModuleName || hModule);
     if (!hProcess || (!lpModuleName && !hModule))
     {
-        return NULL;
-    }
-
-    if ((_NtWow64QueryInformationProcess64 == NULL && _NtQueryInformationProcess == NULL) || (_NtWow64ReadVirtualMemory64 == NULL && _NtReadVirtualMemory == NULL))
-    {
-        ATLASSERT((_NtWow64QueryInformationProcess64 || _NtQueryInformationProcess) && (_NtWow64ReadVirtualMemory64 || _NtReadVirtualMemory));
         return NULL;
     }
 
@@ -412,142 +614,23 @@ DWORD_T FindProcessModuleT_NoLock(HANDLE hProcess, LPCWSTR lpModuleName /*= NULL
         }
     }
 
-    NtQueryInformationProcess_T pfnNtQueryInformationProcess;
-    NtReadVirtualMemoryXX_T pfnNtReadVirtualMemory;
-    if (for64)
-    {
-        pfnNtQueryInformationProcess = _NtWow64QueryInformationProcess64 ? _NtWow64QueryInformationProcess64 : _NtQueryInformationProcess;
-        pfnNtReadVirtualMemory = (NtReadVirtualMemoryXX_T)NtReadVirtualMemory64;
-    }
-    else
-    {
-        pfnNtQueryInformationProcess = _NtQueryInformationProcess;
-        pfnNtReadVirtualMemory = (NtReadVirtualMemoryXX_T)_NtReadVirtualMemory;
-    }
-
-    DWORD dwSize;
-    SIZE_T_T size;
-    NTSTATUS iReturn;
-    PVOID_T pAddrPEB = NULL;
-
     if (lpModuleFullPath && nModuleFullPathLen > 0)
     {
         lpModuleFullPath[0] = 0;
     }
 
-    BOOL Wow64Process;
-    if (!IsWow64Process(hProcess, &Wow64Process))
-    {
-        ATLASSERT(FALSE);
-        return NULL;
-    }
+    FindProcessModuleCallbackCtx ctx;
+    ctx.bFindByName = bFindByName;
+    ctx.bCompareFullPath = bCompareFullPath;
+    ctx.lpModuleName = lpModuleName;
+    ctx.hModule = (DWORD64)(DWORD_T)hModule;
+    ctx.lpModuleFullPath = lpModuleFullPath;
+    ctx.nModuleFullPathLen = nModuleFullPathLen;
+    ctx.resultVal = 0;
 
-    if (Wow64Process && !for64)
-    {
-        ULONG_PTR wow64 = 0;
-        iReturn = pfnNtQueryInformationProcess(hProcess, ProcessWow64Information, &wow64, sizeof(wow64), &dwSize);
-        pAddrPEB = (PVOID_T)wow64;
-    }
-    else
-    {
-        PROCESS_BASIC_INFORMATION_T pbi;
-        iReturn = pfnNtQueryInformationProcess(hProcess, ProcessBasicInformation, &pbi, sizeof(pbi), &dwSize);
-        pAddrPEB = (PVOID_T)(DWORD_T)pbi.PebBaseAddress;
-    }
+    EnumProcessModulesT_NoLock<PVOID_T, DWORD_T, SIZE_T_T, PROCESS_BASIC_INFORMATION_T, PEB_T, PEB_LDR_DATA_T, LDR_DATA_TABLE_ENTRY_T, NtReadVirtualMemoryXX_T, for64>(hProcess, FindProcessModule_EnumCallback, (LPARAM)&ctx);
 
-    // NtQueryInformationProcess returns a negative value if it fails
-    if (iReturn >= 0)
-    {
-        // 1. Find the Process Environment Block
-        PEB_T PEB;
-        size = dwSize;
-        if (ERROR_SUCCESS != pfnNtReadVirtualMemory(hProcess, pAddrPEB, &PEB, sizeof(PEB), &size))
-        {
-            // Call GetLastError() if you need to know why
-            return NULL;
-        }
-
-        SIZE_T_T dwBytesRead;
-        PEB_LDR_DATA_T Ldr;
-        if (ERROR_SUCCESS != pfnNtReadVirtualMemory(hProcess, (PVOID_T)(DWORD_T)PEB.Ldr, (LPVOID)&Ldr, sizeof(Ldr), &dwBytesRead))
-        {
-            ATLTRACE(_T("pfnNtReadVirtualMemory error %u\n"), GetLastError());
-            return NULL;
-        }
-
-
-        LDR_DATA_TABLE_ENTRY_T module_info =
-        {
-            0
-        };
-        /*
-        Get address of first entry
-        nt!_PEB_LDR_DATA
-        ...
-        +0x00c InLoadOrderModuleList : _LIST_ENTRY
-        ...
-        */
-        PVOID InLoadOrderModuleList_Offset = &((PEB_LDR_DATA_T*)NULL)->InLoadOrderModuleList;
-        PVOID_T pStartModuleInfo = (PVOID_T)((DWORD_T)PEB.Ldr + (DWORD_PTR)InLoadOrderModuleList_Offset);
-        PVOID_T pNextModuleInfo = (PVOID_T)(DWORD_T)Ldr.InLoadOrderModuleList.Flink;
-        WCHAR wFullDllName[MAX_PATH];
-
-        //Get info for each loaded DLL
-        do
-        {
-            //Get LDR_MODULE (LDR_DATA_TABLE_ENTRY) structure
-            iReturn = pfnNtReadVirtualMemory(hProcess, pNextModuleInfo, &module_info, sizeof(LDR_DATA_TABLE_ENTRY_T), &dwBytesRead);
-            if (ERROR_SUCCESS != iReturn)
-            {
-                ATLTRACE(_T("pfnNtReadVirtualMemory error %u\n"), iReturn);
-                return NULL;
-            }
-
-            wFullDllName[0] = 0;
-            //Read string with Dll full name
-            iReturn = pfnNtReadVirtualMemory(hProcess, (PVOID_T)(DWORD_T)module_info.FullDllName.Buffer, (LPVOID)&wFullDllName, module_info.FullDllName.MaximumLength, &dwBytesRead);
-            if (ERROR_SUCCESS != iReturn)
-            {
-                ATLTRACE(_T("pfnNtReadVirtualMemory error %u\n"), iReturn);
-                return NULL;
-            }
-            //wprintf(L"0x%I64x %s\n", module_info.DllBase, wFullDllName);
-
-            if (bFindByName)
-            {
-                LPCWSTR pszName = bCompareFullPath ? wFullDllName : PathFindFileNameW(wFullDllName);
-                if (!_wcsicmp(pszName, lpModuleName))
-                {
-                    DWORD len = 0;
-                    if (lpModuleFullPath && nModuleFullPathLen > 0)
-                    {
-                        len = (DWORD)__min(nModuleFullPathLen, wcslen(wFullDllName));
-                        memcpy(lpModuleFullPath, wFullDllName, len * sizeof(WCHAR));
-                        if (len < nModuleFullPathLen) lpModuleFullPath[len] = 0;
-                    }
-                    return (DWORD_T)module_info.DllBase;
-                }
-            }
-            else
-            {
-                if ((PVOID_T)(DWORD_T)module_info.DllBase == hModule)
-                {
-                    DWORD len = 0;
-                    if (lpModuleFullPath && nModuleFullPathLen > 0)
-                    {
-                        len = (DWORD)__min(nModuleFullPathLen, wcslen(wFullDllName));
-                        memcpy(lpModuleFullPath, wFullDllName, len * sizeof(WCHAR));
-                        if (len < nModuleFullPathLen) lpModuleFullPath[len] = 0;
-                    }
-                    return len;
-                }
-            }
-
-            pNextModuleInfo = (PVOID_T)(DWORD_T)module_info.InLoadOrderLinks.Flink;
-        } while (pNextModuleInfo != pStartModuleInfo);
-    }
-
-    return NULL;
+    return (DWORD_T)ctx.resultVal;
 }
 
 static DWORD64 GetProcessModuleHandle64_NoLock(HANDLE hProcess, LPCWSTR lpModuleName)
@@ -632,7 +715,45 @@ static DWORD GetProcessModuleFileNameAuto_NoLock(HANDLE hProcess, PVOID64 hModul
     // 4. On a 64-bit system where this process is 32-bit and the target process is 64-bit
     else
     {
-        return (DWORD)GetProcessModuleFileName64_NoLock(hProcess, hModule, lpFilename, nSize);
+    }
+}
+
+static BOOL EnumProcessModules64_NoLock(HANDLE hProcess, PENUM_PROCESS_MODULES_CALLBACK_NO_LOCK pCallback, LPARAM lParam)
+{
+    return EnumProcessModulesT_NoLock<PVOID64, DWORD64, UINT64, PROCESS_BASIC_INFORMATION64, PEB64, PEB_LDR_DATA64, LDR_DATA_TABLE_ENTRY64, NtReadVirtualMemory64_T, TRUE>(hProcess, pCallback, lParam);
+}
+
+static BOOL EnumProcessModules32_NoLock(HANDLE hProcess, PENUM_PROCESS_MODULES_CALLBACK_NO_LOCK pCallback, LPARAM lParam)
+{
+    return EnumProcessModulesT_NoLock<PVOID, DWORD_PTR, SIZE_T, PROCESS_BASIC_INFORMATION32, PEB32, PEB_LDR_DATA32, LDR_DATA_TABLE_ENTRY32, NtReadVirtualMemory_T, FALSE>(hProcess, pCallback, lParam);
+}
+
+static BOOL EnumProcessModules_NoLock(HANDLE hProcess, PENUM_PROCESS_MODULES_CALLBACK_NO_LOCK pCallback, LPARAM lParam)
+{
+    return EnumProcessModulesT_NoLock<PVOID, DWORD_PTR, SIZE_T, PROCESS_BASIC_INFORMATION, PEB, PEB_LDR_DATA, LDR_DATA_TABLE_ENTRY, NtReadVirtualMemory_T, FALSE>(hProcess, pCallback, lParam);
+}
+
+static BOOL EnumProcessModulesAuto_NoLock(HANDLE hProcess, PENUM_PROCESS_MODULES_CALLBACK_NO_LOCK pCallback, LPARAM lParam)
+{
+    BOOL SelfIsWow64Process;
+    BOOL DstIsWow64Process;
+    if (!IsWow64Process(GetCurrentProcess(), &SelfIsWow64Process) || !IsWow64Process(hProcess, &DstIsWow64Process))
+    {
+        ATLASSERT(FALSE);
+        return FALSE;
+    }
+
+    if (SelfIsWow64Process == DstIsWow64Process)
+    {
+        return EnumProcessModules_NoLock(hProcess, pCallback, lParam);
+    }
+    else if (DstIsWow64Process)
+    {
+        return EnumProcessModules32_NoLock(hProcess, pCallback, lParam);
+    }
+    else
+    {
+        return EnumProcessModules64_NoLock(hProcess, pCallback, lParam);
     }
 }
 

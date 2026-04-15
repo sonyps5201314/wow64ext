@@ -88,7 +88,7 @@ static int Wow64Ext_DoWork_Unsafe(BOOL bToStart)
 
     if (bToStart)
     {
-        if (!FindProcessModuleT_NoLock__CheckForPrepareFunctionPtrs())
+        if (!EnumProcessModulesT_NoLock__CheckForPrepareFunctionPtrs())
         {
             return -10;
         }
